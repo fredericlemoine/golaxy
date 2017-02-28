@@ -1,3 +1,4 @@
+[![GoDoc](https://godoc.org/github.com/fredericlemoine/golaxy?status.svg)](https://godoc.org/github.com/fredericlemoine/golaxy)
 # golaxy : interacting with Galaxy in Go
 
 A first implementation of basic functions to call the [Galaxy](https://usegalaxy.org/) API in [Golang](https://golang.org/).
