@@ -13,7 +13,7 @@ import (
 )
 
 // Response after the creation/deletion of a history
-type HistoryResponse struct {
+type historyResponse struct {
 	Importable        bool         `json:"importable"`
 	Create_time       string       `json:"create_time"`
 	Contents_url      string       `json:"contente_url"`
@@ -22,7 +22,7 @@ type HistoryResponse struct {
 	User_id           string       `json:"user_id"`
 	Username_and_slug string       `json:"username_and_slug"`
 	Annotation        string       `json:"annotation"`
-	State_details     StateDetails `json:"state_details"`
+	State_details     stateDetails `json:"state_details"`
 	State             string       `json:"state"`
 	Empty             bool         `json:"empty"`
 	Update_time       string       `json:"update_time"`
@@ -32,7 +32,7 @@ type HistoryResponse struct {
 	Slug              string       `json:"slug"`
 	Name              string       `json:"name"`
 	Url               string       `json:"url"`
-	State_ids         StateIds     `json:"state_ids"`
+	State_ids         stateIds     `json:"state_ids"`
 	Published         bool         `json:"published"`
 	Model_class       string       `json:"model_class"`
 	Purged            bool         `json:"purged"`
@@ -41,7 +41,7 @@ type HistoryResponse struct {
 }
 
 // Detail of the job state
-type StateDetails struct {
+type stateDetails struct {
 	Paused           int `json:"paused"`
 	Ok               int `json:"ok"`
 	Failed_metadata  int `json:"failed_metadata"`
@@ -56,7 +56,7 @@ type StateDetails struct {
 }
 
 // Id of jobs in different states
-type StateIds struct {
+type stateIds struct {
 	Paused           []string `json:"paused"`
 	Ok               []string `json:"ok"`
 	Failed_metadata  []string `json:"failed_metadata"`
@@ -71,7 +71,7 @@ type StateIds struct {
 }
 
 // Request for fileupload
-type FileUpload struct {
+type fileUpload struct {
 	File_type      string `json:"file_type"`
 	Dbkey          string `json:"dbkey"`
 	To_posix_lines bool   `json:"files0|to_posix_lines"`
@@ -81,16 +81,16 @@ type FileUpload struct {
 }
 
 // Response after calling a tool
-type ToolResponse struct {
-	Outputs              []ToolOutput `json:"outputs"`
+type toolResponse struct {
+	Outputs              []toolOutput `json:"outputs"`
 	Implicit_collections []string     `json:"implicit_collections"`
-	Jobs                 []ToolJob    `json:"jobs"`
+	Jobs                 []toolJob    `json:"jobs"`
 	Output_collections   []string     `json:"output_collections"`
 	Err_msg              string       `json:"err_msg"`  // In case of error, this field is !=""
 	Err_code             int          `json:"err_code"` // In case of error, this field is !=0
 }
 
-type ToolOutput struct {
+type toolOutput struct {
 	Misc_blurb           string   `json:"misc_blurb"`
 	Peek                 string   `json:"peek"`
 	Update_time          string   `json:"update_time"`
@@ -118,7 +118,7 @@ type ToolOutput struct {
 	Purged               bool     `json:"purged"`
 }
 
-type ToolJob struct {
+type toolJob struct {
 	Tool_id     string `json:"tool_id"`     // id of the tool
 	Update_time string `json:"update_time"` // time stamp
 	Exit_code   string `json:"exit_code"`
@@ -129,11 +129,11 @@ type ToolJob struct {
 }
 
 // Response when checking job status
-type Job struct {
+type job struct {
 	Tool_id      string               `json:"tool_id"`      // id of the tool
 	Update_time  string               `json:"update_time"`  // timestamp
-	Inputs       map[string]ToolInput `json:"inputs"`       // input datasets
-	Outputs      map[string]ToolInput `json:"outputs"`      // output datasets
+	Inputs       map[string]toolInput `json:"inputs"`       // input datasets
+	Outputs      map[string]toolInput `json:"outputs"`      // output datasets
 	Command_line string               `json:"command_line"` // full commandline
 	Exit_code    int                  `json:"exit_code"`    // Tool exit code
 	State        string               `json:"state"`        // Job state
@@ -147,13 +147,13 @@ type Job struct {
 }
 
 // Request to call a tool
-type ToolLaunch struct {
+type toolLaunch struct {
 	History_id string               `json:"history_id"` // Id of history
 	Tool_id    string               `json:"tool_id"`    // Id of the tool
-	Infiles    map[string]ToolInput `json:"inputs"`     // Inputs: key name of the input, value dataset id
+	Infiles    map[string]toolInput `json:"inputs"`     // Inputs: key name of the input, value dataset id
 }
 
-type ToolInput struct {
+type toolInput struct {
 	Src  string `json:"src"`  // "hda"
 	Id   string `json:"id"`   // dataset id
 	UUid string `json:"uuid"` // ?
@@ -186,7 +186,7 @@ func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
 	var url string = g.url + HISTORY + "?key=" + g.apikey
 	var req *http.Request
 	var resp *http.Response
-	var answer HistoryResponse
+	var answer historyResponse
 	var client *http.Client
 	var body []byte
 
@@ -224,12 +224,12 @@ func (g *Galaxy) UploadFile(historyid string, path string) (fileid, jobid string
 	var body2 []byte
 	var writer *multipart.Writer
 	var part io.Writer
-	var fileinput *FileUpload
+	var fileinput *fileUpload
 	var input []byte
 	var postrequest *http.Request
 	var postresponse *http.Response
 	var client *http.Client
-	var answer ToolResponse
+	var answer toolResponse
 
 	if file, err = os.Open(path); err != nil {
 		return
@@ -254,7 +254,7 @@ func (g *Galaxy) UploadFile(historyid string, path string) (fileid, jobid string
 		return
 	}
 
-	fileinput = &FileUpload{
+	fileinput = &fileUpload{
 		"auto",
 		"?",
 		false,
@@ -321,22 +321,22 @@ func (g *Galaxy) UploadFile(historyid string, path string) (fileid, jobid string
 // - Jobs: array of job ids
 func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]string) (outfiles map[string]string, jobids []string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
-	var launch *ToolLaunch
+	var launch *toolLaunch
 	var input []byte
 	var req *http.Request
 	var client *http.Client
 	var resp *http.Response
 	var body []byte
-	var answer ToolResponse
+	var answer toolResponse
 
-	launch = &ToolLaunch{
+	launch = &toolLaunch{
 		historyid,
 		toolid,
-		make(map[string]ToolInput),
+		make(map[string]toolInput),
 	}
 
 	for k, v := range infiles {
-		launch.Infiles[k] = ToolInput{"hda", v, ""}
+		launch.Infiles[k] = toolInput{"hda", v, ""}
 	}
 
 	if input, err = json.Marshal(launch); err != nil {
@@ -386,7 +386,7 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 	var req *http.Request
 	var response *http.Response
 	var body []byte
-	var answer Job
+	var answer job
 
 	if req, err = http.NewRequest("GET", url, nil); err != nil {
 		return
@@ -451,7 +451,7 @@ func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 	var req *http.Request
 	var response *http.Response
 	var body []byte
-	var answer HistoryResponse
+	var answer historyResponse
 
 	client = &http.Client{}
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer([]byte("{\"purge\":\"true\"}")))
