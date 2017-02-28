@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 )
 
-/* Response after the creation/deletion of a history */
+// Response after the creation/deletion of a history
 type HistoryResponse struct {
 	Importable        bool         `json:"importable"`
 	Create_time       string       `json:"create_time"`
@@ -40,7 +40,7 @@ type HistoryResponse struct {
 	Err_code          int          `json:"err_code"` // In case of error, this field is !=0
 }
 
-/* Detail of the job state */
+// Detail of the job state
 type StateDetails struct {
 	Paused           int `json:"paused"`
 	Ok               int `json:"ok"`
@@ -55,7 +55,7 @@ type StateDetails struct {
 	Empty            int `json:"empty"`
 }
 
-/* Id of jobs in different states */
+// Id of jobs in different states
 type StateIds struct {
 	Paused           []string `json:"paused"`
 	Ok               []string `json:"ok"`
@@ -70,7 +70,7 @@ type StateIds struct {
 	Empty            []string `json:"empty"`
 }
 
-/* Request for fileupload  */
+// Request for fileupload
 type FileUpload struct {
 	File_type      string `json:"file_type"`
 	Dbkey          string `json:"dbkey"`
@@ -80,7 +80,7 @@ type FileUpload struct {
 	Type           string `json:"files0|type"`
 }
 
-/* Response after calling a tool */
+// Response after calling a tool
 type ToolResponse struct {
 	Outputs              []ToolOutput `json:"outputs"`
 	Implicit_collections []string     `json:"implicit_collections"`
@@ -128,7 +128,7 @@ type ToolJob struct {
 	Id          string `json:"id"`
 }
 
-/* Response when checking job status */
+// Response when checking job status
 type Job struct {
 	Tool_id      string               `json:"tool_id"`      // id of the tool
 	Update_time  string               `json:"update_time"`  // timestamp
@@ -146,7 +146,7 @@ type Job struct {
 	Err_code     int                  `json:"err_code"`     // In case of error, this field is !=0
 }
 
-/* Request to call a tool */
+// Request to call a tool
 type ToolLaunch struct {
 	History_id string               `json:"history_id"` // Id of history
 	Tool_id    string               `json:"tool_id"`    // Id of the tool
@@ -170,10 +170,9 @@ const (
 	TOOLS     = "/api/tools"
 )
 
-/**
-Initializes a new Galaxy with given url of the form http(s)://ip:port
-and an api key
-*/
+// Initializes a new Galaxy with given:
+// - url of the form http(s)://ip:port
+// - and an api key
 func NewGalaxy(url, key string) *Galaxy {
 	return &Galaxy{
 		url,
@@ -181,10 +180,8 @@ func NewGalaxy(url, key string) *Galaxy {
 	}
 }
 
-/**
-Creates an history with given name on the Galaxy instance
-and returns its id
-*/
+// Creates an history with given name on the Galaxy instance
+// and returns its id
 func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
 	var url string = g.url + HISTORY + "?key=" + g.apikey
 	var req *http.Request
@@ -218,10 +215,8 @@ func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
 	return
 }
 
-/**
-Uploads the given file to the galaxy instance in the history defined by its id
-Returns the file id, the job id and a potential error
-*/
+// Uploads the given file to the galaxy instance in the history defined by its id
+// Returns the file id, the job id and a potential error
 func (g *Galaxy) UploadFile(historyid string, path string) (fileid, jobid string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
 	var file *os.File
@@ -316,16 +311,14 @@ func (g *Galaxy) UploadFile(historyid string, path string) (fileid, jobid string
 	return
 }
 
-/**
-Launches a job at the given galaxy instance, with:
-- The tool given by its id (name)
-- Using the given history
-- Giving as input the files in the map : key: tool input name, value: dataset id
-
-Returns:
-- Tool outputs : map[out file name]=out file id
-- Jobs: array of job ids
-*/
+// Launches a job at the given galaxy instance, with:
+// - The tool given by its id (name)
+// - Using the given history
+// - Giving as input the files in the map : key: tool input name, value: dataset id
+//
+// Returns:
+// - Tool outputs : map[out file name]=out file id
+// - Jobs: array of job ids
 func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]string) (outfiles map[string]string, jobids []string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
 	var launch *ToolLaunch
@@ -383,12 +376,10 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 	return
 }
 
-/**
-Queries the galaxy instance to check the job defined by its Id
-Returns:
-- job State
-- Output files: map : key: out filename value: out file id
-*/
+// Queries the galaxy instance to check the job defined by its Id
+// Returns:
+// - job State
+// - Output files: map : key: out filename value: out file id
 func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]string, err error) {
 	var url string = g.url + CHECK_JOB + "/" + jobid + "?key=" + g.apikey
 	var client *http.Client = &http.Client{}
@@ -425,12 +416,10 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 	return
 }
 
-/**
-Downloads a file defined by its id from the given history of the galaxy instance
-Returns:
-- The content of the file in []byte
-- A potential error
-*/
+// Downloads a file defined by its id from the given history of the galaxy instance
+// Returns:
+// - The content of the file in []byte
+// - A potential error
 func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err error) {
 	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display" + "?key=" + g.apikey
 	var client *http.Client = &http.Client{}
@@ -452,12 +441,10 @@ func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err err
 	return
 }
 
-/**
-Deletes and purges an history defined by its id
-Returns:
-- The state of the deletion ("ok")
-- A potential error
-*/
+// Deletes and purges an history defined by its id
+// Returns:
+// - The state of the deletion ("ok")
+// - A potential error
 func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 	var url string = g.url + HISTORY + "/" + historyid + "?key=" + g.apikey
 	var client *http.Client
