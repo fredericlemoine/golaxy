@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -13,7 +12,8 @@ import (
 	"path/filepath"
 )
 
-type CreateHistoryResponse struct {
+/* Response after the creation/deletion of a history */
+type HistoryResponse struct {
 	Importable        bool         `json:"importable"`
 	Create_time       string       `json:"create_time"`
 	Contents_url      string       `json:"contente_url"`
@@ -24,7 +24,7 @@ type CreateHistoryResponse struct {
 	Annotation        string       `json:"annotation"`
 	State_details     StateDetails `json:"state_details"`
 	State             string       `json:"state"`
-	empty             bool         `json:"empty"`
+	Empty             bool         `json:"empty"`
 	Update_time       string       `json:"update_time"`
 	Tags              []string     `json:"tags"`
 	Deleted           bool         `json:"deleted"`
@@ -36,8 +36,11 @@ type CreateHistoryResponse struct {
 	Published         bool         `json:"published"`
 	Model_class       string       `json:"model_class"`
 	Purged            bool         `json:"purged"`
+	Err_msg           string       `json:"err_msg"`  // In case of error, this field is !=""
+	Err_code          int          `json:"err_code"` // In case of error, this field is !=0
 }
 
+/* Detail of the job state */
 type StateDetails struct {
 	Paused           int `json:"paused"`
 	Ok               int `json:"ok"`
@@ -52,6 +55,7 @@ type StateDetails struct {
 	Empty            int `json:"empty"`
 }
 
+/* Id of jobs in different states */
 type StateIds struct {
 	Paused           []string `json:"paused"`
 	Ok               []string `json:"ok"`
@@ -66,6 +70,7 @@ type StateIds struct {
 	Empty            []string `json:"empty"`
 }
 
+/* Request for fileupload  */
 type FileUpload struct {
 	File_type      string `json:"file_type"`
 	Dbkey          string `json:"dbkey"`
@@ -75,11 +80,14 @@ type FileUpload struct {
 	Type           string `json:"files0|type"`
 }
 
+/* Response after calling a tool */
 type ToolResponse struct {
 	Outputs              []ToolOutput `json:"outputs"`
 	Implicit_collections []string     `json:"implicit_collections"`
 	Jobs                 []ToolJob    `json:"jobs"`
 	Output_collections   []string     `json:"output_collections"`
+	Err_msg              string       `json:"err_msg"`  // In case of error, this field is !=""
+	Err_code             int          `json:"err_code"` // In case of error, this field is !=0
 }
 
 type ToolOutput struct {
@@ -111,53 +119,61 @@ type ToolOutput struct {
 }
 
 type ToolJob struct {
-	Tool_id     string `json:"tool_id"`
-	Update_time string `json:"update_time"`
+	Tool_id     string `json:"tool_id"`     // id of the tool
+	Update_time string `json:"update_time"` // time stamp
 	Exit_code   string `json:"exit_code"`
-	State       string `json:"state"`
+	State       string `json:"state"` //
 	Create_time string `json:"create_time"`
 	Model_class string `json:"model_class"`
 	Id          string `json:"id"`
 }
 
+/* Response when checking job status */
 type Job struct {
-	Tool_id      string `json:"tool_id"`
-	Update_time  string `json:"update_time"`
-	Inputs       map[string]ToolInput
-	Outputs      map[string]ToolInput
-	Command_line string `json:"command_line"`
-	Exit_code    int    `json:"exit_code"`
-	State        string `json:"state"`
-	Create_time  string `json:"create_time"`
-	Params       map[string]string
-	Model_class  string `json:"model_class"`
-	External_id  string `json:"external_id"`
-	Id           string `json:"id"`
+	Tool_id      string               `json:"tool_id"`      // id of the tool
+	Update_time  string               `json:"update_time"`  // timestamp
+	Inputs       map[string]ToolInput `json:"inputs"`       // input datasets
+	Outputs      map[string]ToolInput `json:"outputs"`      // output datasets
+	Command_line string               `json:"command_line"` // full commandline
+	Exit_code    int                  `json:"exit_code"`    // Tool exit code
+	State        string               `json:"state"`        // Job state
+	Create_time  string               `json:"create_time"`  // Job creation time
+	Params       map[string]string    `json:"params"`       // ?
+	Model_class  string               `json:"model_class"`  // Kind of object: "job"
+	External_id  string               `json:"external_id"`  // ?
+	Id           string               `json:"id"`           // Id if the job
+	Err_msg      string               `json:"err_msg"`      // In case of error, this field is !=""
+	Err_code     int                  `json:"err_code"`     // In case of error, this field is !=0
 }
 
+/* Request to call a tool */
 type ToolLaunch struct {
-	History_id string               `json:"history_id"`
-	Tool_id    string               `json:"tool_id"`
-	Infiles    map[string]ToolInput `json:"inputs"`
+	History_id string               `json:"history_id"` // Id of history
+	Tool_id    string               `json:"tool_id"`    // Id of the tool
+	Infiles    map[string]ToolInput `json:"inputs"`     // Inputs: key name of the input, value dataset id
 }
 
 type ToolInput struct {
-	Src  string `json:"src"`
-	Id   string `json:"id"`
-	UUid string `json:"uuid"`
+	Src  string `json:"src"`  // "hda"
+	Id   string `json:"id"`   // dataset id
+	UUid string `json:"uuid"` // ?
 }
 
 type Galaxy struct {
-	url    string
-	apikey string
+	url    string // url of the galaxy instance: http(s)://ip:port/
+	apikey string // api key
 }
 
 const (
-	CREATE_HISTORY = "/api/histories"
-	CHECK_JOB      = "/api/jobs/"
-	TOOLS          = "/api/tools"
+	HISTORY   = "/api/histories"
+	CHECK_JOB = "/api/jobs/"
+	TOOLS     = "/api/tools"
 )
 
+/**
+Initializes a new Galaxy with given url of the form http(s)://ip:port
+and an api key
+*/
 func NewGalaxy(url, key string) *Galaxy {
 	return &Galaxy{
 		url,
@@ -165,59 +181,85 @@ func NewGalaxy(url, key string) *Galaxy {
 	}
 }
 
-func (g *Galaxy) CreateHistory(name string) (string, error) {
-	url := g.url + CREATE_HISTORY + "?key=" + g.apikey
-	fmt.Println(url)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte("{\"name\":\""+name+"\"}")))
-	client := &http.Client{}
-	resp, err2 := client.Do(req)
-	if err2 != nil {
-		return "", err
+/**
+Creates an history with given name on the Galaxy instance
+and returns its id
+*/
+func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
+	var url string = g.url + HISTORY + "?key=" + g.apikey
+	var req *http.Request
+	var resp *http.Response
+	var answer HistoryResponse
+	var client *http.Client
+	var body []byte
+
+	if req, err = http.NewRequest("POST", url, bytes.NewBuffer([]byte("{\"name\":\""+name+"\"}"))); err != nil {
+		return
+	}
+	client = &http.Client{}
+
+	if resp, err = client.Do(req); err != nil {
+		return
 	}
 	defer resp.Body.Close()
 
-	body, err3 := ioutil.ReadAll(resp.Body)
-	if err3 != nil {
-		return "", err3
-	}
-	var answer CreateHistoryResponse
-	err4 := json.Unmarshal(body, &answer)
-	if err4 != nil {
-		return "", err4
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		return
 	}
 
-	return answer.Id, nil
+	if err = json.Unmarshal(body, &answer); err != nil {
+		return
+	}
+	if answer.Err_code != 0 {
+		err = errors.New(answer.Err_msg)
+		return
+	}
+	historyid = answer.Id
+	return
 }
 
-/* Returns File id, job id and error*/
-func (g *Galaxy) UploadFile(historyid string, path string) (string, string, error) {
-	url := g.url + TOOLS + "?key=" + g.apikey
-	fmt.Println(url)
+/**
+Uploads the given file to the galaxy instance in the history defined by its id
+Returns the file id, the job id and a potential error
+*/
+func (g *Galaxy) UploadFile(historyid string, path string) (fileid, jobid string, err error) {
+	var url string = g.url + TOOLS + "?key=" + g.apikey
+	var file *os.File
+	var body *bytes.Buffer
+	var body2 []byte
+	var writer *multipart.Writer
+	var part io.Writer
+	var fileinput *FileUpload
+	var input []byte
+	var postrequest *http.Request
+	var postresponse *http.Response
+	var client *http.Client
+	var answer ToolResponse
 
-	file, err := os.Open(path)
-	if err != nil {
-		return "", "", err
+	if file, err = os.Open(path); err != nil {
+		return
 	}
 	defer file.Close()
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, err2 := writer.CreateFormFile("files_0|file_data", filepath.Base(path))
-	if err2 != nil {
-		return "", "", err2
+
+	body = &bytes.Buffer{}
+	writer = multipart.NewWriter(body)
+
+	if part, err = writer.CreateFormFile("files_0|file_data", filepath.Base(path)); err != nil {
+		return
 	}
-	_, err = io.Copy(part, file)
-	if err != nil {
-		return "", "", err
+
+	if _, err = io.Copy(part, file); err != nil {
+		return
 	}
 
 	if err = writer.WriteField("history_id", historyid); err != nil {
-		return "", "", err
+		return
 	}
 	if err = writer.WriteField("tool_id", "upload1"); err != nil {
-		return "", "", err
+		return
 	}
 
-	fileinput := &FileUpload{
+	fileinput = &FileUpload{
 		"auto",
 		"?",
 		false,
@@ -225,155 +267,225 @@ func (g *Galaxy) UploadFile(historyid string, path string) (string, string, erro
 		filepath.Base(path),
 		"upload_dataset",
 	}
-	input, err4 := json.Marshal(fileinput)
-	if err4 != nil {
-		return "", "", err
+	if input, err = json.Marshal(fileinput); err != nil {
+		return
 	}
 	if err = writer.WriteField("inputs", string(input)); err != nil {
-		return "", "", err
+		return
 	}
 
 	if err = writer.Close(); err != nil {
-		return "", "", err
+		return
 	}
 
-	postrequest, err5 := http.NewRequest("POST", url, body)
-	if err5 != nil {
-		return "", "", err5
+	if postrequest, err = http.NewRequest("POST", url, body); err != nil {
+		return
 	}
-
 	postrequest.Header.Set("Content-Type", writer.FormDataContentType())
-	client := &http.Client{}
-	postresponse, err6 := client.Do(postrequest)
-	if err6 != nil {
-		return "", "", err6
-	}
 
+	client = &http.Client{}
+	if postresponse, err = client.Do(postrequest); err != nil {
+		return
+	}
 	defer postresponse.Body.Close()
 
-	body2, err7 := ioutil.ReadAll(postresponse.Body)
-	if err7 != nil {
-		return "", "", err7
+	if body2, err = ioutil.ReadAll(postresponse.Body); err != nil {
+		return
 	}
 
-	var answer ToolResponse
-	err8 := json.Unmarshal(body2, &answer)
-	if err8 != nil {
-		return "", "", err8
+	if err = json.Unmarshal(body2, &answer); err != nil {
+		return
+	}
+	if answer.Err_code != 0 {
+		err = errors.New(answer.Err_msg)
+		return
 	}
 
 	if len(answer.Outputs) != 1 {
-		return "", "", errors.New("Error while uploading the file : Number of Outputs")
+		err = errors.New("Error while uploading the file : Number of Outputs")
+		return
 	}
-	fileid := answer.Outputs[0].Id
-	if len(answer.Jobs) != 1 {
-		return "", "", errors.New("Error while uploading the file : Number of Jobs")
-	}
-	jobid := answer.Jobs[0].Id
 
-	return fileid, jobid, nil
+	fileid = answer.Outputs[0].Id
+	if len(answer.Jobs) != 1 {
+		err = errors.New("Error while uploading the file : Number of Jobs")
+		return
+	}
+	jobid = answer.Jobs[0].Id
+
+	return
 }
 
-/* Returns job id and error
-infiles: key: input name, value: file id
-Output: map[out file name]=out file id
-Output: array of out job ids
-*/
-func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]string) (map[string]string, []string, error) {
-	url := g.url + TOOLS + "?key=" + g.apikey
-	fmt.Println(url)
+/**
+Launches a job at the given galaxy instance, with:
+- The tool given by its id (name)
+- Using the given history
+- Giving as input the files in the map : key: tool input name, value: dataset id
 
-	launch := &ToolLaunch{
+Returns:
+- Tool outputs : map[out file name]=out file id
+- Jobs: array of job ids
+*/
+func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]string) (outfiles map[string]string, jobids []string, err error) {
+	var url string = g.url + TOOLS + "?key=" + g.apikey
+	var launch *ToolLaunch
+	var input []byte
+	var req *http.Request
+	var client *http.Client
+	var resp *http.Response
+	var body []byte
+	var answer ToolResponse
+
+	launch = &ToolLaunch{
 		historyid,
 		toolid,
 		make(map[string]ToolInput),
 	}
+
 	for k, v := range infiles {
 		launch.Infiles[k] = ToolInput{"hda", v, ""}
 	}
-	input, err := json.Marshal(launch)
-	if err != nil {
-		return nil, nil, err
+
+	if input, err = json.Marshal(launch); err != nil {
+		return
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(input))
-	client := &http.Client{}
-	resp, err2 := client.Do(req)
-	if err2 != nil {
-		return nil, nil, err2
+	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(input)); err != nil {
+		return
+	}
+
+	client = &http.Client{}
+	if resp, err = client.Do(req); err != nil {
+		return
 	}
 	defer resp.Body.Close()
 
-	body, err3 := ioutil.ReadAll(resp.Body)
-	if err3 != nil {
-		return nil, nil, err3
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		return
 	}
-	var answer ToolResponse
-	err4 := json.Unmarshal(body, &answer)
-	if err4 != nil {
-		return nil, nil, err4
+	if err = json.Unmarshal(body, &answer); err != nil {
+		return
+	}
+	if answer.Err_code != 0 {
+		err = errors.New(answer.Err_msg)
+		return
 	}
 
-	outfiles := make(map[string]string)
+	outfiles = make(map[string]string)
 	for _, to := range answer.Outputs {
 		outfiles[to.Name] = to.Id
 	}
-	outjobs := make([]string, 0, 10)
+	jobids = make([]string, 0, 10)
 	for _, j := range answer.Jobs {
-		outjobs = append(outjobs, j.Id)
+		jobids = append(jobids, j.Id)
 	}
 
-	return outfiles, outjobs, nil
+	return
 }
 
-/*
-  int job status
-  map : key: out filename value: out file id
+/**
+Queries the galaxy instance to check the job defined by its Id
+Returns:
+- job State
+- Output files: map : key: out filename value: out file id
 */
-func (g *Galaxy) CheckJob(jobid string) (string, map[string]string, error) {
-	url := g.url + CHECK_JOB + "/" + jobid + "?key=" + g.apikey
-	fmt.Println(url)
+func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]string, err error) {
+	var url string = g.url + CHECK_JOB + "/" + jobid + "?key=" + g.apikey
+	var client *http.Client = &http.Client{}
+	var req *http.Request
+	var response *http.Response
+	var body []byte
+	var answer Job
 
-	client := &http.Client{}
-	req, _ := http.NewRequest("GET", url, nil)
-	response, err := client.Do(req)
-	if err != nil {
-		return "", nil, err
+	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		return
+	}
+	if response, err = client.Do(req); err != nil {
+		return
 	}
 	defer response.Body.Close()
 
-	body, err2 := ioutil.ReadAll(response.Body)
-	if err2 != nil {
-		return "", nil, err2
+	if body, err = ioutil.ReadAll(response.Body); err != nil {
+		return
 	}
 
-	var answer Job
-	err3 := json.Unmarshal(body, &answer)
-	if err3 != nil {
-		return "", nil, err3
+	if err = json.Unmarshal(body, &answer); err != nil {
+		return
+	}
+	if answer.Err_code != 0 {
+		err = errors.New(answer.Err_msg)
+		return
 	}
 
-	outfiles := make(map[string]string)
+	outfiles = make(map[string]string)
 	for k, v := range answer.Outputs {
 		outfiles[k] = v.Id
 	}
-	return answer.State, outfiles, nil
+	jobstate = answer.State
+	return
 }
-func (g *Galaxy) DownloadFile(historyid, fileid string) ([]byte, error) {
-	url := g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display" + "?key=" + g.apikey
-	fmt.Println(url)
 
-	client := &http.Client{}
-	req, _ := http.NewRequest("GET", url, nil)
-	response, err := client.Do(req)
-	if err != nil {
-		return nil, err
+/**
+Downloads a file defined by its id from the given history of the galaxy instance
+Returns:
+- The content of the file in []byte
+- A potential error
+*/
+func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err error) {
+	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display" + "?key=" + g.apikey
+	var client *http.Client = &http.Client{}
+	var req *http.Request
+	var response *http.Response
+
+	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		return
+	}
+
+	if response, err = client.Do(req); err != nil {
+		return
 	}
 	defer response.Body.Close()
 
-	body, err2 := ioutil.ReadAll(response.Body)
-	if err2 != nil {
-		return nil, err2
+	if content, err = ioutil.ReadAll(response.Body); err != nil {
+		return
 	}
-	return body, nil
+	return
+}
+
+/**
+Deletes and purges an history defined by its id
+Returns:
+- The state of the deletion ("ok")
+- A potential error
+*/
+func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
+	var url string = g.url + HISTORY + "/" + historyid + "?key=" + g.apikey
+	var client *http.Client
+	var req *http.Request
+	var response *http.Response
+	var body []byte
+	var answer HistoryResponse
+
+	client = &http.Client{}
+	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer([]byte("{\"purge\":\"true\"}")))
+
+	if response, err = client.Do(req); err != nil {
+		return
+	}
+	defer response.Body.Close()
+
+	if body, err = ioutil.ReadAll(response.Body); err != nil {
+		return
+	}
+
+	if err = json.Unmarshal(body, &answer); err != nil {
+		return
+	}
+	if answer.Err_code != 0 {
+		err = errors.New(answer.Err_msg)
+		return
+	}
+
+	state = answer.State
+	return
 }
