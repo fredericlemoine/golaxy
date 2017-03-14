@@ -2,6 +2,7 @@ package golaxy
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -160,8 +161,9 @@ type toolInput struct {
 }
 
 type Galaxy struct {
-	url    string // url of the galaxy instance: http(s)://ip:port/
-	apikey string // api key
+	url              string // url of the galaxy instance: http(s)://ip:port/
+	apikey           string // api key
+	trustcertificate bool   // if we should trust galaxy certificate
 }
 
 const (
@@ -173,10 +175,11 @@ const (
 // Initializes a new Galaxy with given:
 // - url of the form http(s)://ip:port
 // - and an api key
-func NewGalaxy(url, key string) *Galaxy {
+func NewGalaxy(url, key string, trustcertificate bool) *Galaxy {
 	return &Galaxy{
 		url,
 		key,
+		trustcertificate,
 	}
 }
 
@@ -187,15 +190,13 @@ func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
 	var req *http.Request
 	var resp *http.Response
 	var answer historyResponse
-	var client *http.Client
 	var body []byte
 
 	if req, err = http.NewRequest("POST", url, bytes.NewBuffer([]byte("{\"name\":\""+name+"\"}"))); err != nil {
 		return
 	}
-	client = &http.Client{}
 
-	if resp, err = client.Do(req); err != nil {
+	if resp, err = g.newClient().Do(req); err != nil {
 		return
 	}
 	defer resp.Body.Close()
@@ -229,7 +230,6 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	var input []byte
 	var postrequest *http.Request
 	var postresponse *http.Response
-	var client *http.Client
 	var answer toolResponse
 
 	if file, err = os.Open(path); err != nil {
@@ -279,8 +279,7 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	}
 	postrequest.Header.Set("Content-Type", writer.FormDataContentType())
 
-	client = &http.Client{}
-	if postresponse, err = client.Do(postrequest); err != nil {
+	if postresponse, err = g.newClient().Do(postrequest); err != nil {
 		return
 	}
 	defer postresponse.Body.Close()
@@ -325,7 +324,6 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 	var launch *toolLaunch
 	var input []byte
 	var req *http.Request
-	var client *http.Client
 	var resp *http.Response
 	var body []byte
 	var answer toolResponse
@@ -348,8 +346,7 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 		return
 	}
 
-	client = &http.Client{}
-	if resp, err = client.Do(req); err != nil {
+	if resp, err = g.newClient().Do(req); err != nil {
 		return
 	}
 	defer resp.Body.Close()
@@ -383,7 +380,6 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 // - Output files: map : key: out filename value: out file id
 func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]string, err error) {
 	var url string = g.url + CHECK_JOB + "/" + jobid + "?key=" + g.apikey
-	var client *http.Client = &http.Client{}
 	var req *http.Request
 	var response *http.Response
 	var body []byte
@@ -392,7 +388,7 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 	if req, err = http.NewRequest("GET", url, nil); err != nil {
 		return
 	}
-	if response, err = client.Do(req); err != nil {
+	if response, err = g.newClient().Do(req); err != nil {
 		return
 	}
 	defer response.Body.Close()
@@ -423,7 +419,6 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 // - A potential error
 func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err error) {
 	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display" + "?key=" + g.apikey
-	var client *http.Client = &http.Client{}
 	var req *http.Request
 	var response *http.Response
 
@@ -431,7 +426,7 @@ func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err err
 		return
 	}
 
-	if response, err = client.Do(req); err != nil {
+	if response, err = g.newClient().Do(req); err != nil {
 		return
 	}
 	defer response.Body.Close()
@@ -448,16 +443,14 @@ func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err err
 // - A potential error
 func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 	var url string = g.url + HISTORY + "/" + historyid + "?key=" + g.apikey
-	var client *http.Client
 	var req *http.Request
 	var response *http.Response
 	var body []byte
 	var answer historyResponse
 
-	client = &http.Client{}
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer([]byte("{\"purge\":\"true\"}")))
 
-	if response, err = client.Do(req); err != nil {
+	if response, err = g.newClient().Do(req); err != nil {
 		return
 	}
 	defer response.Body.Close()
@@ -476,4 +469,10 @@ func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 
 	state = answer.State
 	return
+}
+
+func (g *Galaxy) newClient() *http.Client {
+	config := &tls.Config{InsecureSkipVerify: g.trustcertificate} // this line here
+	tr := &http.Transport{TLSClientConfig: config}
+	return &http.Client{Transport: tr}
 }
