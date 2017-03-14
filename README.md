@@ -32,7 +32,7 @@ func main() {
 	}
 
 	/* Upload a file */
-	if infileid, _, err = g.UploadFile(historyid, "/path/to/file"); err != nil {
+	if infileid, _, err = g.UploadFile(historyid, "/path/to/file","auto"); err != nil {
 		panic(err)
 	}
 

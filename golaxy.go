@@ -216,8 +216,9 @@ func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
 }
 
 // Uploads the given file to the galaxy instance in the history defined by its id
+// and the given type (auto/txt/nhx/etc.)
 // Returns the file id, the job id and a potential error
-func (g *Galaxy) UploadFile(historyid string, path string) (fileid, jobid string, err error) {
+func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid, jobid string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
 	var file *os.File
 	var body *bytes.Buffer
@@ -255,7 +256,7 @@ func (g *Galaxy) UploadFile(historyid string, path string) (fileid, jobid string
 	}
 
 	fileinput = &fileUpload{
-		"auto",
+		ftype,
 		"?",
 		false,
 		false,
