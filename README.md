@@ -24,7 +24,7 @@ func main() {
 	var jobstate string
 	var filecontent []byte
 
-	g = golaxy.NewGalaxy("http://galaxyip:port", "apikey")
+	g = golaxy.NewGalaxy("http://galaxyip:port", "apikey", false)
 
 	/* Create new history */
 	if historyid, err = g.CreateHistory("My history"); err != nil {
