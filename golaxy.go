@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -149,9 +150,9 @@ type job struct {
 
 // Request to call a tool
 type toolLaunch struct {
-	History_id string               `json:"history_id"` // Id of history
-	Tool_id    string               `json:"tool_id"`    // Id of the tool
-	Infiles    map[string]toolInput `json:"inputs"`     // Inputs: key name of the input, value dataset id
+	History_id string                 `json:"history_id"` // Id of history
+	Tool_id    string                 `json:"tool_id"`    // Id of the tool
+	Inputs     map[string]interface{} `json:"inputs"`     // Inputs: key name of the input, value dataset id
 }
 
 type toolInput struct {
@@ -319,7 +320,7 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 // Returns:
 // - Tool outputs : map[out file name]=out file id
 // - Jobs: array of job ids
-func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]string) (outfiles map[string]string, jobids []string, err error) {
+func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]string, inparams map[string]string) (outfiles map[string]string, jobids []string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
 	var launch *toolLaunch
 	var input []byte
@@ -331,17 +332,21 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 	launch = &toolLaunch{
 		historyid,
 		toolid,
-		make(map[string]toolInput),
+		make(map[string]interface{}),
 	}
 
 	for k, v := range infiles {
-		launch.Infiles[k] = toolInput{"hda", v, ""}
+		launch.Inputs[k] = toolInput{"hda", v, ""}
+	}
+
+	for k, v := range inparams {
+		launch.Inputs[k] = v
 	}
 
 	if input, err = json.Marshal(launch); err != nil {
 		return
 	}
-
+	fmt.Println(string(input))
 	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(input)); err != nil {
 		return
 	}
@@ -357,7 +362,7 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 	if err = json.Unmarshal(body, &answer); err != nil {
 		return
 	}
-	if answer.Err_code != 0 {
+	if answer.Err_msg != "" {
 		err = errors.New(answer.Err_msg)
 		return
 	}
