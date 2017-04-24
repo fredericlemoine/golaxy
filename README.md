@@ -39,7 +39,9 @@ func main() {
 	/* Launch Job */
 	mapfiles := make(map[string]string)
 	mapfiles["input"] = infileid
-	if _, jobids, err = g.LaunchTool(historyid, "my_tool", mapfiles); err != nil {
+	params := make(map[string]string)
+	params["option"] = "optionvalue"
+	if _, jobids, err = g.LaunchTool(historyid, "my_tool", mapfiles, params); err != nil {
 		panic(err)
 	}
 	if len(jobids) < 1 {
