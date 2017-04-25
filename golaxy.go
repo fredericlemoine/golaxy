@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -346,7 +345,6 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 	if input, err = json.Marshal(launch); err != nil {
 		return
 	}
-	fmt.Println(string(input))
 	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(input)); err != nil {
 		return
 	}
