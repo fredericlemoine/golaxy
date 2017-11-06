@@ -479,3 +479,30 @@ func (g *Galaxy) newClient() *http.Client {
 	tr := &http.Transport{TLSClientConfig: config}
 	return &http.Client{Transport: tr}
 }
+
+// This function returns ID of the tools corresponding to
+// the name in argument
+//
+// It queries the galaxy entry point api/tools?q=<name>
+func (g *Galaxy) SearchTool(name string) (answer []string, err error) {
+	var url string = g.url + TOOLS + "?q=" + name
+	var req *http.Request
+	var resp *http.Response
+	var body []byte
+
+	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		return
+	}
+
+	if resp, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		return
+	}
+
+	err = json.Unmarshal(body, &answer)
+	return
+}
