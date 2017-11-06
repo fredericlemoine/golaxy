@@ -160,6 +160,33 @@ type toolInput struct {
 	UUid string `json:"uuid"` // ?
 }
 
+// Informations about a specific tool
+type toolInfo struct {
+	Description          string             `json:"description"` // Description of the tool
+	Edam_operations      []string           `json:"edam_operations"`
+	Edam_topics          []string           `json:"edam_topics"`
+	Form_style           string             `json:"form_style"`
+	Id                   string             `json:"id"`
+	Labels               []string           `json:"labels"`
+	Model_class          string             `json:"model_class"`
+	Name                 string             `json:"name"`
+	Panel_Section_Id     string             `json:"panel_section_id"`
+	Panel_Section_Name   string             `json:"panel_section_name"`
+	Tool_Shed_Repository toolShedRepository `json:"tool_shed_repository"`
+	Version              string             `json:"version"`
+	Traceboack           string             `json:"traceback"`
+	Err_Msg              string             `json:"err_msg"`
+	Err_Code             string             `json:"err_code"`
+}
+
+// Informations about a toolshed
+type toolShedRepository struct {
+	Changeset_Revision string `json:"changeset_revision"`
+	Name               string `json:"name"`
+	Owner              string `json:"owner"`
+	Tool_shed          string `json:"tool_shed"`
+}
+
 type Galaxy struct {
 	url              string // url of the galaxy instance: http(s)://ip:port/
 	apikey           string // api key
@@ -482,11 +509,50 @@ func (g *Galaxy) newClient() *http.Client {
 }
 
 // This function returns ID of the tools corresponding to
-// the name in argument
+// the name/ID in argument.
 //
-// It queries the galaxy entry point api/tools?q=<name>
-func (g *Galaxy) SearchTool(name string) (answer []string, err error) {
+// It first query the api/tools/<name> entry point. if
+// The returned tool has the is==given name then returns it.
+// Otherwize, it queries the galaxy entry point api/tools?q=<name>
+func (g *Galaxy) SearchToolID(name string) (toolIds []string, err error) {
+	var info toolInfo
+	// We first try to see if the tool with an ID
+	// Corresponding to the given name exists
+	info, err = g.getToolById(name)
+	if err == nil && info.Err_Code == "" && info.Id == name {
+		toolIds = []string{info.Id}
+	} else {
+		// Otherwize we use the search entry point
+		toolIds, err = g.searchToolIDsByName(name)
+	}
+	return
+}
+
+func (g *Galaxy) getToolById(id string) (tool toolInfo, err error) {
+	var url string = g.url + TOOLS + "/" + id
+	var req *http.Request
+	var resp *http.Response
+	var body []byte
+
+	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		return
+	}
+
+	if resp, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		return
+	}
+	err = json.Unmarshal(body, &tool)
+	return
+}
+
+func (g *Galaxy) searchToolIDsByName(name string) (ids []string, err error) {
 	var url string = g.url + TOOLS + "?q=" + name
+
 	var req *http.Request
 	var resp *http.Response
 	var body []byte
@@ -504,6 +570,6 @@ func (g *Galaxy) SearchTool(name string) (answer []string, err error) {
 		return
 	}
 
-	err = json.Unmarshal(body, &answer)
+	err = json.Unmarshal(body, &ids)
 	return
 }
