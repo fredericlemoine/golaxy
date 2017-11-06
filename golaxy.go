@@ -174,9 +174,9 @@ type toolInfo struct {
 	Panel_Section_Name   string             `json:"panel_section_name"`
 	Tool_Shed_Repository toolShedRepository `json:"tool_shed_repository"`
 	Version              string             `json:"version"`
-	Traceboack           string             `json:"traceback"`
-	Err_Msg              string             `json:"err_msg"`
-	Err_Code             string             `json:"err_code"`
+	Traceboack           string             `json:"traceback"` // Set only if the server returns an error
+	Err_Msg              string             `json:"err_msg"`   // Err_Msg =="" if no error
+	Err_Code             string             `json:"err_code"`  // Err_Code=="" if no error
 }
 
 // Informations about a toolshed
