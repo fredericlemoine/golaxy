@@ -511,9 +511,12 @@ func (g *Galaxy) newClient() *http.Client {
 // This function returns ID of the tools corresponding to
 // the name/ID in argument.
 //
-// It first query the api/tools/<name> entry point. if
-// The returned tool has the is==given name then returns it.
-// Otherwize, it queries the galaxy entry point api/tools?q=<name>
+// It first queryies the
+//	api/tools/<name>
+// entry point. If The returned tool has its ID == given name
+// then returns it.
+// Otherwise, it queries the galaxy entry point
+//	api/tools?q=<name>
 func (g *Galaxy) SearchToolID(name string) (toolIds []string, err error) {
 	var info toolInfo
 	// We first try to see if the tool with an ID
