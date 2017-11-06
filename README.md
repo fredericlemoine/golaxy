@@ -36,12 +36,25 @@ func main() {
 		panic(err)
 	}
 
+	/* Searching the right tool id */
+	var my_tool string
+	if tools, err := g.SearchToolID("my_tool"); err != nil {
+		panic(err)
+	} else {
+		if len(tools)==0 {
+			panic("no tool found")
+		} else {
+			fmt.Println(fmt.Sprintf("%d tools found",len(tools)))
+			my_tool=tools[len(tools)-1]
+		}
+	}
+
 	/* Launch Job */
 	mapfiles := make(map[string]string)
 	mapfiles["input"] = infileid
 	params := make(map[string]string)
 	params["option"] = "optionvalue"
-	if _, jobids, err = g.LaunchTool(historyid, "my_tool", mapfiles, params); err != nil {
+	if _, jobids, err = g.LaunchTool(historyid, my_tool, mapfiles, params); err != nil {
 		panic(err)
 	}
 	if len(jobids) < 1 {
