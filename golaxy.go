@@ -173,8 +173,8 @@ const (
 )
 
 // Initializes a new Galaxy with given:
-// - url of the form http(s)://ip:port
-// - and an api key
+// 	- url of the form http(s)://ip:port
+// 	- and an api key
 func NewGalaxy(url, key string, trustcertificate bool) *Galaxy {
 	return &Galaxy{
 		url,
@@ -218,6 +218,7 @@ func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
 
 // Uploads the given file to the galaxy instance in the history defined by its id
 // and the given type (auto/txt/nhx/etc.)
+//
 // Returns the file id, the job id and a potential error
 func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid, jobid string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
@@ -312,13 +313,13 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 }
 
 // Launches a job at the given galaxy instance, with:
-// - The tool given by its id (name)
-// - Using the given history
-// - Giving as input the files in the map : key: tool input name, value: dataset id
+// 	- The tool given by its id (name)
+// 	- Using the given history
+// 	- Giving as input the files in the map : key: tool input name, value: dataset id
 //
 // Returns:
-// - Tool outputs : map[out file name]=out file id
-// - Jobs: array of job ids
+// 	- Tool outputs : map[out file name]=out file id
+// 	- Jobs: array of job ids
 func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]string, inparams map[string]string) (outfiles map[string]string, jobids []string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
 	var launch *toolLaunch
@@ -379,8 +380,8 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 
 // Queries the galaxy instance to check the job defined by its Id
 // Returns:
-// - job State
-// - Output files: map : key: out filename value: out file id
+// 	- job State
+// 	- Output files: map : key: out filename value: out file id
 func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]string, err error) {
 	var url string = g.url + CHECK_JOB + "/" + jobid + "?key=" + g.apikey
 	var req *http.Request
@@ -418,8 +419,8 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 
 // Downloads a file defined by its id from the given history of the galaxy instance
 // Returns:
-// - The content of the file in []byte
-// - A potential error
+// 	- The content of the file in []byte
+// 	- A potential error
 func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err error) {
 	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display" + "?key=" + g.apikey
 	var req *http.Request
@@ -442,8 +443,8 @@ func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err err
 
 // Deletes and purges an history defined by its id
 // Returns:
-// - The state of the deletion ("ok")
-// - A potential error
+// 	- The state of the deletion ("ok")
+// 	- A potential error
 func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 	var url string = g.url + HISTORY + "/" + historyid + "?key=" + g.apikey
 	var req *http.Request
