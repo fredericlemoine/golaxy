@@ -5,12 +5,15 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 // Response after the creation/deletion of a history
@@ -133,8 +136,8 @@ type toolJob struct {
 type job struct {
 	Tool_id      string               `json:"tool_id"`      // id of the tool
 	Update_time  string               `json:"update_time"`  // timestamp
-	Inputs       map[string]toolInput `json:"inputs"`       // input datasets
-	Outputs      map[string]toolInput `json:"outputs"`      // output datasets
+	Inputs       map[string]ToolInput `json:"inputs"`       // input datasets
+	Outputs      map[string]ToolInput `json:"outputs"`      // output datasets
 	Command_line string               `json:"command_line"` // full commandline
 	Exit_code    int                  `json:"exit_code"`    // Tool exit code
 	State        string               `json:"state"`        // Job state
@@ -154,7 +157,7 @@ type toolLaunch struct {
 	Inputs     map[string]interface{} `json:"inputs"`     // Inputs: key name of the input, value dataset id
 }
 
-type toolInput struct {
+type ToolInput struct {
 	Src  string `json:"src"`  // "hda"
 	Id   string `json:"id"`   // dataset id
 	UUid string `json:"uuid"` // ?
@@ -187,6 +190,92 @@ type toolShedRepository struct {
 	Tool_shed          string `json:"tool_shed"`
 }
 
+type WorkflowInput struct {
+	Label string `json:label`
+	Uuid  string `json:uuid`
+	Value string `json:uuid`
+}
+
+type WorkflowInputStep struct {
+	Source_Step int    `json:"source_step"` // ID of the previous step serving as input here
+	Step_Output string `json:"step_output"` // Name of the output  of the previous step serving as input here
+}
+
+type WorkflowStep struct {
+	Annotation   string                       `json:"annotation"`
+	Id           int                          `json:"id"`
+	Input_Steps  map[string]WorkflowInputStep `json:"input_steps"`
+	Tool_Id      string                       `json:"tool_id"`
+	Tool_Inputs  map[string]string            `json:"tool_inputs"`
+	Tool_Version string                       `json:"tool_version"`
+	Type         string                       `json:"type"`
+}
+
+// Informations about a workflow
+type WorkflowInfo struct {
+	Annotation           string                   `json:"annotation"`
+	Deleted              bool                     `json:"deleted"`
+	Id                   string                   `json:"id"`
+	Inputs               map[string]WorkflowInput `json:"inputs"`
+	Latest_Workflow_UUID string                   `json:"latest_workflow_uuid"`
+	Model_Class          string                   `json:"model_class"`
+	Name                 string                   `json:"name"`
+	Owner                string                   `json:"owner"`
+	Published            bool                     `json:"published"`
+	Steps                map[string]WorkflowStep  `json:"steps"`
+	Tags                 []string                 `json:"tags"`
+	Url                  string                   `json:"url"`
+	Traceboack           string                   `json:"traceback"` // Set only if the server returns an error
+	Err_Msg              string                   `json:"err_msg"`   // Err_Msg =="" if no error
+	Err_Code             int                      `json:"err_code"`  // Err_Code==0 if no error
+}
+
+type WorkflowLaunch struct {
+	History_id  string                    `json:"history_id"`  // Id of history
+	Workflow_id string                    `json:"workflow_id"` // Id of the tool
+	Inputs      map[string]ToolInput      `json:"inputs"`      // Inputs: key name of the input, value dataset id
+	Parameters  map[int]map[string]string `json:"parameters"`  // Parameters to the workflow : key: Step id, value: map of key:value parameters
+}
+
+// When a workflow is launched, it is returned by the server
+type WorkflowInvocation struct {
+	History     string                   `json:"history"`
+	History_Id  string                   `json:"history_id"`
+	Id          string                   `json:"id"`
+	Inputs      map[string]ToolInput     `json:"inputs"`
+	Model_Class string                   `json:"model_class"`
+	Outputs     []string                 `json:"outputs"`
+	State       string                   `json:"state"`
+	Steps       []WorkflowInvocationStep `json:"steps"`
+	Update_Time string                   `json:"update_time"`
+	Uuid        string                   `json:"uuid"`
+	Workflow_Id string                   `json:"workflow_id"`
+	Traceboack  string                   `json:"traceback"` // Set only if the server returns an error
+	Err_Msg     string                   `json:"err_msg"`   // Err_Msg =="" if no error
+	Err_Code    string                   `json:"err_code"`  // Err_Code=="" if no error
+}
+
+// One of the steps given after invocation of the workflow
+type WorkflowInvocationStep struct {
+	Action              string `json:"action"`
+	Id                  string `json:"id"`
+	Job_Id              string `json:"job_id"`
+	Model_Class         string `json:"model_class"`
+	Order_Index         int    `json:"order_index"`
+	State               string `json:"state"`
+	Update_Time         string `json:"update_time"`
+	Workflow_Step_Id    string `json:"workflow_step_id"`
+	Workflow_Step_Label string `json:"workflow_step_label"`
+	Workflow_Step_Uuid  string `json:"workflow_step_uuid"`
+}
+
+// Error returned by galaxy
+type genericError struct {
+	Traceboack string `json:"traceback"` // Set only if the server returns an error
+	Err_Msg    string `json:"err_msg"`   // Err_Msg =="" if no error
+	Err_Code   int    `json:"err_code"`  // Err_Code==0 if no error
+}
+
 type Galaxy struct {
 	url              string // url of the galaxy instance: http(s)://ip:port/
 	apikey           string // api key
@@ -197,6 +286,7 @@ const (
 	HISTORY   = "/api/histories"
 	CHECK_JOB = "/api/jobs/"
 	TOOLS     = "/api/tools"
+	WORKFLOWS = "/api/workflows"
 )
 
 // Initializes a new Galaxy with given:
@@ -363,7 +453,7 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 	}
 
 	for k, v := range infiles {
-		launch.Inputs[k] = toolInput{"hda", v, ""}
+		launch.Inputs[k] = ToolInput{"hda", v, ""}
 	}
 
 	for k, v := range inparams {
@@ -574,5 +664,182 @@ func (g *Galaxy) searchToolIDsByName(name string) (ids []string, err error) {
 	}
 
 	err = json.Unmarshal(body, &ids)
+	return
+}
+
+// Search a workflow on the glaaxy server.
+//
+// It will first search for a workflow with ID exactly equal to the given name.
+// If it does not exist, then will search a workflow having a lower(name) matching
+// containing the given lower(name).
+func (g *Galaxy) SearchWorkflowIDs(name string) (ids []string, err error) {
+	var wf WorkflowInfo
+	if wf, err = g.GetWorkflowByID(name); err != nil {
+		ids, err = g.searchWorkflowIDsByName(name)
+	} else {
+		fmt.Println("Found by ID!")
+		ids = []string{wf.Id}
+	}
+	return
+}
+
+// Call galaxy api to look for a workflow with the given ID
+func (g *Galaxy) GetWorkflowByID(inputid string) (wf WorkflowInfo, err error) {
+	var url string = g.url + WORKFLOWS + "/" + inputid + "?key=" + g.apikey
+
+	var req *http.Request
+	var resp *http.Response
+	var body []byte
+
+	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		return
+	}
+
+	if resp, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		return
+	}
+
+	if err = json.Unmarshal(body, &wf); err != nil {
+		return
+	} else if wf.Err_Code != 0 {
+		err = errors.New(wf.Err_Msg)
+		return
+	}
+
+	return
+}
+
+func (g *Galaxy) searchWorkflowIDsByName(name string) (ids []string, err error) {
+	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
+
+	var req *http.Request
+	var resp *http.Response
+	var body []byte
+	var wfs []WorkflowInfo
+	var galaxyErr genericError
+	var r *regexp.Regexp
+
+	ids = make([]string, 0)
+
+	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		return
+	}
+
+	if resp, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		return
+	}
+
+	err = json.Unmarshal(body, &wfs)
+	if err != nil {
+		err = json.Unmarshal(body, &galaxyErr)
+		if err != nil {
+			return
+		}
+		if galaxyErr.Err_Code != 0 {
+			err = errors.New(galaxyErr.Err_Msg)
+		} else {
+			err = errors.New("Error while Searching Workflows ID by Namee")
+		}
+		return
+	}
+
+	if r, err = regexp.Compile(".*" + strings.ToLower(name) + ".*"); err != nil {
+		return
+	}
+
+	for _, wf := range wfs {
+		if ok := r.MatchString(strings.ToLower(wf.Name)); ok {
+			ids = append(ids, wf.Id)
+		}
+	}
+	return
+}
+
+func (g *Galaxy) NewWorkflowLauncher(historyid string, workflowid string) (launch *WorkflowLaunch) {
+	launch = &WorkflowLaunch{
+		historyid,
+		workflowid,
+		make(map[string]ToolInput),
+		make(map[int]map[string]string),
+	}
+	return
+}
+
+// Add new input file to the workflow
+//
+//	- inputIndex : index of this input in the workflow (see WorkflowInfo / GetWorkflowById)
+//	- fielId: id of input file
+//	- fielScr : one of  ["ldda", "ld", "hda", "hdca"]
+func (wl *WorkflowLaunch) AddFileInput(inputIndex string, fileId string, fileSrc string) {
+	wl.Inputs[inputIndex] = ToolInput{fileSrc, fileId, ""}
+}
+
+// Add new parameter to workflow launcher
+//
+//	- fielId: id of input file
+//	- fielScr : one of  ["ldda", "ld", "hda", "hdca"]
+func (wl *WorkflowLaunch) AddParameter(stepIndex int, paramName string, paramValue string) {
+	if _, ok := wl.Parameters[stepIndex]; !ok {
+		wl.Parameters[stepIndex] = make(map[string]string)
+	}
+	wl.Parameters[stepIndex][paramName] = paramValue
+}
+
+// Launches the given workflow (defined by its ID), with given inputs and params.
+//
+// Infiles are defined by their indexes on the workflow
+//
+// Inparams are defined as key: step id of the workflow, value: map of key:param name/value: param value
+func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer WorkflowInvocation, err error) {
+	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
+	var input []byte
+	var req *http.Request
+	var resp *http.Response
+	var body []byte
+	//var answer toolResponse
+	if input, err = json.Marshal(launch); err != nil {
+		return
+	}
+	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(input)); err != nil {
+		return
+	}
+
+	if resp, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		return
+	}
+
+	fmt.Println(string(body))
+	if err = json.Unmarshal(body, &answer); err != nil {
+		return
+	}
+	if answer.Err_msg != "" {
+		err = errors.New(answer.Err_msg)
+		return
+	}
+
+	// outfiles = make(map[string]string)
+	// for _, to := range answer.Outputs {
+	// 	outfiles[to.Name] = to.Id
+	// }
+	// jobids = make([]string, 0, 10)
+	// for _, j := range answer.Jobs {
+	// 	jobids = append(jobids, j.Id)
+	// }
+
 	return
 }
