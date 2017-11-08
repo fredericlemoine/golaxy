@@ -146,8 +146,9 @@ type job struct {
 	Model_class  string               `json:"model_class"`  // Kind of object: "job"
 	External_id  string               `json:"external_id"`  // ?
 	Id           string               `json:"id"`           // Id if the job
-	Err_msg      string               `json:"err_msg"`      // In case of error, this field is !=""
-	Err_code     int                  `json:"err_code"`     // In case of error, this field is !=0
+	Traceback    string               `json:"traceback"`
+	Err_msg      string               `json:"err_msg"`  // In case of error, this field is !=""
+	Err_code     int                  `json:"err_code"` // In case of error, this field is !=0
 }
 
 // Request to call a tool
@@ -252,7 +253,7 @@ type WorkflowInvocation struct {
 	Workflow_Id string                   `json:"workflow_id"`
 	Traceboack  string                   `json:"traceback"` // Set only if the server returns an error
 	Err_Msg     string                   `json:"err_msg"`   // Err_Msg =="" if no error
-	Err_Code    string                   `json:"err_code"`  // Err_Code=="" if no error
+	Err_Code    int                      `json:"err_code"`  // Err_Code=="" if no error
 }
 
 // One of the steps given after invocation of the workflow
@@ -505,7 +506,6 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 	var response *http.Response
 	var body []byte
 	var answer job
-
 	if req, err = http.NewRequest("GET", url, nil); err != nil {
 		return
 	}
@@ -677,7 +677,6 @@ func (g *Galaxy) SearchWorkflowIDs(name string) (ids []string, err error) {
 	if wf, err = g.GetWorkflowByID(name); err != nil {
 		ids, err = g.searchWorkflowIDsByName(name)
 	} else {
-		fmt.Println("Found by ID!")
 		ids = []string{wf.Id}
 	}
 	return
@@ -800,16 +799,19 @@ func (wl *WorkflowLaunch) AddParameter(stepIndex int, paramName string, paramVal
 // Infiles are defined by their indexes on the workflow
 //
 // Inparams are defined as key: step id of the workflow, value: map of key:param name/value: param value
-func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer WorkflowInvocation, err error) {
+func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocation, err error) {
 	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
 	var input []byte
 	var req *http.Request
 	var resp *http.Response
 	var body []byte
-	//var answer toolResponse
+
+	answer = &WorkflowInvocation{}
+
 	if input, err = json.Marshal(launch); err != nil {
 		return
 	}
+
 	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(input)); err != nil {
 		return
 	}
@@ -822,24 +824,76 @@ func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer WorkflowInvocati
 	if body, err = ioutil.ReadAll(resp.Body); err != nil {
 		return
 	}
-
 	fmt.Println(string(body))
-	if err = json.Unmarshal(body, &answer); err != nil {
+	if err = json.Unmarshal(body, answer); err != nil {
 		return
 	}
-	if answer.Err_msg != "" {
-		err = errors.New(answer.Err_msg)
+	if answer.Err_Code != 0 {
+		err = errors.New(answer.Err_Msg)
 		return
 	}
 
-	// outfiles = make(map[string]string)
-	// for _, to := range answer.Outputs {
-	// 	outfiles[to.Name] = to.Id
-	// }
-	// jobids = make([]string, 0, 10)
-	// for _, j := range answer.Jobs {
-	// 	jobids = append(jobids, j.Id)
-	// }
+	return
+}
+
+// This function Checks the status of each step of the workflow
+//
+// It returns :
+//	- workflowstate: A indicator of the whole workflow state:
+//		* If all steps are "ok": then  == "ok"
+//		* Else if one step is "deleted": then == "deleted"
+//		* Else if one step is "running": then == "running"
+//		* Else if one step is "queued": then == "queued"
+//		* Else if one step is "waiting": then == "waiting"
+//		* Else if one is is "new": then == "new"
+//		* Else : Unknown state
+//	- jobstates: map[Workflow Step Id]=State
+//	- outfiles: map[Workflow Step Id]=(map[File name] = File ID)
+func (g *Galaxy) CheckWorkflow(wfi *WorkflowInvocation) (workflowstate string, jobstates map[int]string, outfiles map[int]map[string]string, err error) {
+	var curstate string
+	var curoutfiles map[string]string
+	var cumstate map[string]int
+
+	jobstates = make(map[int]string)
+	outfiles = make(map[int]map[string]string)
+	cumstate = make(map[string]int)
+
+	numjobsids := 0
+	for _, step := range wfi.Steps {
+		if step.Job_Id != "" {
+			numjobsids++
+			if curstate, curoutfiles, err = g.CheckJob(step.Job_Id); err != nil {
+				return
+			} else {
+				jobstates[step.Order_Index] = curstate
+				outfiles[step.Order_Index] = curoutfiles
+				if cursum, ok := cumstate[curstate]; !ok {
+					cumstate[curstate] = 1
+				} else {
+					cumstate[curstate] = cursum + 1
+				}
+			}
+		}
+	}
+
+	var sum int
+	var ok bool
+
+	if sum, ok = cumstate["ok"]; ok && sum == numjobsids {
+		workflowstate = "ok"
+	} else if sum, ok = cumstate["deleted"]; ok && sum >= 1 {
+		workflowstate = "deleted"
+	} else if sum, ok = cumstate["running"]; ok && sum >= 1 {
+		workflowstate = "running"
+	} else if sum, ok = cumstate["queued"]; ok && sum >= 1 {
+		workflowstate = "queued"
+	} else if sum, ok = cumstate["waiting"]; ok && sum >= 1 {
+		workflowstate = "waiting"
+	} else if sum, ok = cumstate["new"]; ok && sum >= 1 {
+		workflowstate = "new"
+	} else {
+		workflowstate = "unknown"
+	}
 
 	return
 }
