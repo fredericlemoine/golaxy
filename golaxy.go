@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -824,7 +823,7 @@ func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocat
 	if body, err = ioutil.ReadAll(resp.Body); err != nil {
 		return
 	}
-	fmt.Println(string(body))
+
 	if err = json.Unmarshal(body, answer); err != nil {
 		return
 	}
