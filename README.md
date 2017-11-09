@@ -4,6 +4,9 @@
 A first implementation of basic functions to call the [Galaxy](https://usegalaxy.org/) API in [Golang](https://golang.org/).
 
 # Example of usage
+
+## Launch a single tool and monitor its execution
+
 ```go
 package main
 
@@ -23,20 +26,21 @@ func main() {
 	var outfiles map[string]string
 	var jobstate string
 	var filecontent []byte
+	var tl *golaxy.ToolLaunch
 
 	g = golaxy.NewGalaxy("http://galaxyip:port", "apikey", false)
 
-	/* Create new history */
+	// Creates new history
 	if historyid, err = g.CreateHistory("My history"); err != nil {
 		panic(err)
 	}
 
-	/* Upload a file */
+	// Uploads a file
 	if infileid, _, err = g.UploadFile(historyid, "/path/to/file","auto"); err != nil {
 		panic(err)
 	}
 
-	/* Searching the right tool id */
+	// Searches for the right tool id
 	var my_tool string
 	if tools, err := g.SearchToolID("my_tool"); err != nil {
 		panic(err)
@@ -49,12 +53,12 @@ func main() {
 		}
 	}
 
-	/* Launch Job */
-	mapfiles := make(map[string]string)
-	mapfiles["input"] = infileid
-	params := make(map[string]string)
-	params["option"] = "optionvalue"
-	if _, jobids, err = g.LaunchTool(historyid, my_tool, mapfiles, params); err != nil {
+	// Launches a new  Job
+	tl = g.NewToolLauncher(historyid, my_tool)
+	tl.AddParameter("option", "optionvalue")
+	tl.AddFileInput("input", infileid, "hda")
+	
+	if _, jobids, err = g.LaunchTool(tl); err != nil {
 		panic(err)
 	}
 	if len(jobids) < 1 {
@@ -63,14 +67,14 @@ func main() {
 
 	end := false
 	for !end {
-		/* Check job state */
+		// Checks job status
 		if jobstate, outfiles, err = g.CheckJob(jobids[0]); err != nil {
 			panic(err)
 		}
 
 		if jobstate == "ok" {
 			for _, id := range outfiles {
-				/* Download output files */
+				// Downloads output files
 				if filecontent, err = g.DownloadFile(historyid, id); err != nil {
 					panic(err)
 				}
@@ -85,10 +89,92 @@ func main() {
 		}
 		time.Sleep(2 * time.Second)
 	}
-	/* Delete history */
+	// Deletes history
 	if jobstate, err = g.DeleteHistory(historyid); err != nil {
 		panic(err)
 	}
 	fmt.Println(jobstate)
+}
+```
+
+## Launch a workflow and monitor its execution
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/fredericlemoine/golaxy"
+)
+
+func main() {
+	g := golaxy.NewGalaxy("http://galaxyip:port", "apikey", false)
+	var err error
+	var historyid string
+	var infileid string
+	var wfids []string
+	var wfinvocation *golaxy.WorkflowInvocation
+	var workflowstate *golaxy.WorkflowStatus
+
+	// Creates a new history
+	if historyid, err = g.CreateHistory("My history"); err != nil {
+		panic(err)
+	}
+
+	// Searches the workflow with given id (checks that it exists) 
+	if wfids, err = g.SearchWorkflowIDs("cc1fde5b44055598"); err != nil {
+		panic(err)
+	}
+
+	// Uploads input file
+	if infileid, _, err = g.UploadFile(historyid, "/path/to/file", "auto"); err != nil {
+		panic(err)
+	}
+
+	// Initializes a launcher
+	l := g.NewWorkflowLauncher(historyid, wfids[0])
+	l.AddFileInput("<input number>", infileid, "hda")
+	l.AddParameter(<step number>, "param name", "param value")
+	if wfinvocation, err = g.LaunchWorkflow(l); err != nil {
+		panic(err)
+	}
+
+	// Now waits for the end of the execution
+	end := false
+	for !end {
+		if workflowstate, err = g.CheckWorkflow(wfinvocation); err != nil {
+			panic(err)
+		}
+		fmt.Println("Workflow Status: " + workflowstate.Status())
+		// For all steps 
+		for steprank := range workflowstate.ListStepRanks() {
+			var status string
+			var outfilenames []string
+			var fileid string
+			// Status of the given step
+			if status, err = workflowstate.StepStatus(steprank); err == nil {
+				fmt.Println("\t Job " + fmt.Sprintf("%d", steprank) + " = " + status)
+				// Names and ids of outfiles of this step
+				if outfilenames, err = workflowstate.StepOutFileNames(steprank); err != nil {
+					panic(err)
+				}
+				for _, name := range outfilenames {
+					if fileid, err = workflowstate.StepOutputFileId(steprank, name); err == nil {
+						fmt.Println("\t\tFile " + name + " = " + fileid)
+					}
+				}
+			}
+		}
+		end = (workflowstate.Status() == "ok" || workflowstate.Status() == "unknown" || workflowstate.Status()=="deleted")
+		time.Sleep(2 * time.Second)
+	}
+	
+	// Deletes history
+	if jobstate, err = g.DeleteHistory(historyid); err != nil {
+		panic(err)
+	}
+
 }
 ```

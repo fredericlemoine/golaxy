@@ -153,7 +153,7 @@ type job struct {
 }
 
 // Request to call a tool
-type toolLaunch struct {
+type ToolLaunch struct {
 	History_id string                 `json:"history_id"` // Id of history
 	Tool_id    string                 `json:"tool_id"`    // Id of the tool
 	Inputs     map[string]interface{} `json:"inputs"`     // Inputs: key name of the input, value dataset id
@@ -441,6 +441,33 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	return
 }
 
+// Initializes a ToolLaunch that will be used to start a new job with the given tool
+// on the given history
+func (g *Galaxy) NewToolLauncher(historyid string, toolid string) (tl *ToolLaunch) {
+	tl = &ToolLaunch{
+		historyid,
+		toolid,
+		make(map[string]interface{}),
+	}
+	return
+}
+
+// Add new input file to the Tool Launcher
+//
+//	- inputIndex : index of this input in the workflow (see WorkflowInfo / GetWorkflowById)
+//	- fielId: id of input file
+//	- fielScr : one of  ["ldda", "ld", "hda", "hdca"]
+func (tl *ToolLaunch) AddFileInput(paramname string, fileid string, filescr string) {
+	tl.Inputs[paramname] = toolInput{filescr, fileid, ""}
+}
+
+// Add new parameter to Tool launcher
+//	- paramname: name of the tool parameter
+//	- paramvalue: value of the given parameter
+func (tl *ToolLaunch) AddParameter(paramname, paramvalue string) {
+	tl.Inputs[paramname] = paramvalue
+}
+
 // Launches a job at the given galaxy instance, with:
 // 	- The tool given by its id (name)
 // 	- Using the given history
@@ -449,30 +476,15 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 // Returns:
 // 	- Tool outputs : map[out file name]=out file id
 // 	- Jobs: array of job ids
-func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]string, inparams map[string]string) (outfiles map[string]string, jobids []string, err error) {
+func (g *Galaxy) LaunchTool(tl *ToolLaunch) (outfiles map[string]string, jobids []string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
-	var launch *toolLaunch
 	var input []byte
 	var req *http.Request
 	var resp *http.Response
 	var body []byte
 	var answer toolResponse
 
-	launch = &toolLaunch{
-		historyid,
-		toolid,
-		make(map[string]interface{}),
-	}
-
-	for k, v := range infiles {
-		launch.Inputs[k] = toolInput{"hda", v, ""}
-	}
-
-	for k, v := range inparams {
-		launch.Inputs[k] = v
-	}
-
-	if input, err = json.Marshal(launch); err != nil {
+	if input, err = json.Marshal(tl); err != nil {
 		return
 	}
 	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(input)); err != nil {
