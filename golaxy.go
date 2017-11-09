@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -135,8 +137,8 @@ type toolJob struct {
 type job struct {
 	Tool_id      string               `json:"tool_id"`      // id of the tool
 	Update_time  string               `json:"update_time"`  // timestamp
-	Inputs       map[string]ToolInput `json:"inputs"`       // input datasets
-	Outputs      map[string]ToolInput `json:"outputs"`      // output datasets
+	Inputs       map[string]toolInput `json:"inputs"`       // input datasets
+	Outputs      map[string]toolInput `json:"outputs"`      // output datasets
 	Command_line string               `json:"command_line"` // full commandline
 	Exit_code    int                  `json:"exit_code"`    // Tool exit code
 	State        string               `json:"state"`        // Job state
@@ -157,7 +159,7 @@ type toolLaunch struct {
 	Inputs     map[string]interface{} `json:"inputs"`     // Inputs: key name of the input, value dataset id
 }
 
-type ToolInput struct {
+type toolInput struct {
 	Src  string `json:"src"`  // "hda"
 	Id   string `json:"id"`   // dataset id
 	UUid string `json:"uuid"` // ?
@@ -190,21 +192,21 @@ type toolShedRepository struct {
 	Tool_shed          string `json:"tool_shed"`
 }
 
-type WorkflowInput struct {
+type workflowInput struct {
 	Label string `json:label`
 	Uuid  string `json:uuid`
 	Value string `json:uuid`
 }
 
-type WorkflowInputStep struct {
+type workflowInputStep struct {
 	Source_Step int    `json:"source_step"` // ID of the previous step serving as input here
 	Step_Output string `json:"step_output"` // Name of the output  of the previous step serving as input here
 }
 
-type WorkflowStep struct {
+type workflowStep struct {
 	Annotation   string                       `json:"annotation"`
 	Id           int                          `json:"id"`
-	Input_Steps  map[string]WorkflowInputStep `json:"input_steps"`
+	Input_Steps  map[string]workflowInputStep `json:"input_steps"`
 	Tool_Id      string                       `json:"tool_id"`
 	Tool_Inputs  map[string]string            `json:"tool_inputs"`
 	Tool_Version string                       `json:"tool_version"`
@@ -216,13 +218,13 @@ type WorkflowInfo struct {
 	Annotation           string                   `json:"annotation"`
 	Deleted              bool                     `json:"deleted"`
 	Id                   string                   `json:"id"`
-	Inputs               map[string]WorkflowInput `json:"inputs"`
+	Inputs               map[string]workflowInput `json:"inputs"`
 	Latest_Workflow_UUID string                   `json:"latest_workflow_uuid"`
 	Model_Class          string                   `json:"model_class"`
 	Name                 string                   `json:"name"`
 	Owner                string                   `json:"owner"`
 	Published            bool                     `json:"published"`
-	Steps                map[string]WorkflowStep  `json:"steps"`
+	Steps                map[string]workflowStep  `json:"steps"`
 	Tags                 []string                 `json:"tags"`
 	Url                  string                   `json:"url"`
 	Traceboack           string                   `json:"traceback"` // Set only if the server returns an error
@@ -233,7 +235,7 @@ type WorkflowInfo struct {
 type WorkflowLaunch struct {
 	History_id  string                    `json:"history_id"`  // Id of history
 	Workflow_id string                    `json:"workflow_id"` // Id of the tool
-	Inputs      map[string]ToolInput      `json:"inputs"`      // Inputs: key name of the input, value dataset id
+	Inputs      map[string]toolInput      `json:"inputs"`      // Inputs: key name of the input, value dataset id
 	Parameters  map[int]map[string]string `json:"parameters"`  // Parameters to the workflow : key: Step id, value: map of key:value parameters
 }
 
@@ -242,7 +244,7 @@ type WorkflowInvocation struct {
 	History     string                   `json:"history"`
 	History_Id  string                   `json:"history_id"`
 	Id          string                   `json:"id"`
-	Inputs      map[string]ToolInput     `json:"inputs"`
+	Inputs      map[string]toolInput     `json:"inputs"`
 	Model_Class string                   `json:"model_class"`
 	Outputs     []string                 `json:"outputs"`
 	State       string                   `json:"state"`
@@ -274,6 +276,16 @@ type genericError struct {
 	Traceboack string `json:"traceback"` // Set only if the server returns an error
 	Err_Msg    string `json:"err_msg"`   // Err_Msg =="" if no error
 	Err_Code   int    `json:"err_code"`  // Err_Code==0 if no error
+}
+
+// Information about status of a workflow run
+//	- General status
+//	- Status of each step
+//	- Output file ids of each steps
+type WorkflowStatus struct {
+	wfStatus   string                    // Workflow global status
+	stepStatus map[int]string            // All step status per steprank
+	outfiles   map[int]map[string]string // All output files (map[name]id) per steprank
 }
 
 type Galaxy struct {
@@ -453,7 +465,7 @@ func (g *Galaxy) LaunchTool(historyid string, toolid string, infiles map[string]
 	}
 
 	for k, v := range infiles {
-		launch.Inputs[k] = ToolInput{"hda", v, ""}
+		launch.Inputs[k] = toolInput{"hda", v, ""}
 	}
 
 	for k, v := range inparams {
@@ -767,7 +779,7 @@ func (g *Galaxy) NewWorkflowLauncher(historyid string, workflowid string) (launc
 	launch = &WorkflowLaunch{
 		historyid,
 		workflowid,
-		make(map[string]ToolInput),
+		make(map[string]toolInput),
 		make(map[int]map[string]string),
 	}
 	return
@@ -779,7 +791,7 @@ func (g *Galaxy) NewWorkflowLauncher(historyid string, workflowid string) (launc
 //	- fielId: id of input file
 //	- fielScr : one of  ["ldda", "ld", "hda", "hdca"]
 func (wl *WorkflowLaunch) AddFileInput(inputIndex string, fileId string, fileSrc string) {
-	wl.Inputs[inputIndex] = ToolInput{fileSrc, fileId, ""}
+	wl.Inputs[inputIndex] = toolInput{fileSrc, fileId, ""}
 }
 
 // Add new parameter to workflow launcher
@@ -837,8 +849,8 @@ func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocat
 
 // This function Checks the status of each step of the workflow
 //
-// It returns :
-//	- workflowstate: A indicator of the whole workflow state:
+// It returns workflowstatus: An indicator of the whole workflow status,
+// its step status, and its step outputfiles. The whole status is computed as follows:
 //		* If all steps are "ok": then  == "ok"
 //		* Else if one step is "deleted": then == "deleted"
 //		* Else if one step is "running": then == "running"
@@ -846,16 +858,22 @@ func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocat
 //		* Else if one step is "waiting": then == "waiting"
 //		* Else if one is is "new": then == "new"
 //		* Else : Unknown state
-//	- jobstates: map[Workflow Step Id]=State
-//	- outfiles: map[Workflow Step Id]=(map[File name] = File ID)
-func (g *Galaxy) CheckWorkflow(wfi *WorkflowInvocation) (workflowstate string, jobstates map[int]string, outfiles map[int]map[string]string, err error) {
+func (g *Galaxy) CheckWorkflow(wfi *WorkflowInvocation) (wfstatus *WorkflowStatus, err error) {
 	var curstate string
 	var curoutfiles map[string]string
 	var cumstate map[string]int
+	var jobstates map[int]string
+	var outfiles map[int]map[string]string
 
 	jobstates = make(map[int]string)
 	outfiles = make(map[int]map[string]string)
 	cumstate = make(map[string]int)
+
+	wfstatus = &WorkflowStatus{
+		curstate,
+		jobstates,
+		outfiles,
+	}
 
 	numjobsids := 0
 	for _, step := range wfi.Steps {
@@ -879,20 +897,84 @@ func (g *Galaxy) CheckWorkflow(wfi *WorkflowInvocation) (workflowstate string, j
 	var ok bool
 
 	if sum, ok = cumstate["ok"]; ok && sum == numjobsids {
-		workflowstate = "ok"
+		wfstatus.wfStatus = "ok"
 	} else if sum, ok = cumstate["deleted"]; ok && sum >= 1 {
-		workflowstate = "deleted"
+		wfstatus.wfStatus = "deleted"
 	} else if sum, ok = cumstate["running"]; ok && sum >= 1 {
-		workflowstate = "running"
+		wfstatus.wfStatus = "running"
 	} else if sum, ok = cumstate["queued"]; ok && sum >= 1 {
-		workflowstate = "queued"
+		wfstatus.wfStatus = "queued"
 	} else if sum, ok = cumstate["waiting"]; ok && sum >= 1 {
-		workflowstate = "waiting"
+		wfstatus.wfStatus = "waiting"
 	} else if sum, ok = cumstate["new"]; ok && sum >= 1 {
-		workflowstate = "new"
+		wfstatus.wfStatus = "new"
 	} else {
-		workflowstate = "unknown"
+		wfstatus.wfStatus = "unknown"
 	}
 
+	return
+}
+
+// Returns the global status of the workflow. It is computed as follows:
+//		* If all steps are "ok": then  == "ok"
+//		* Else if one step is "deleted": then == "deleted"
+//		* Else if one step is "running": then == "running"
+//		* Else if one step is "queued": then == "queued"
+//		* Else if one step is "waiting": then == "waiting"
+//		* Else if one is is "new": then == "new"
+//		* Else : Unknown state
+func (ws *WorkflowStatus) Status() string {
+	return ws.wfStatus
+}
+
+// Gets the output file id of the given step number and having the given name
+//
+// If the step does not exist or the file with the given name does not exist, returns an error.
+func (ws *WorkflowStatus) StepOutputFileId(stepRank int, filename string) (fileId string, err error) {
+	var ok bool
+	var outfiles map[string]string
+	if outfiles, ok = ws.outfiles[stepRank]; !ok {
+		err = errors.New(fmt.Sprintf("No Step with rank %d exists", stepRank))
+	}
+	if fileId, ok = outfiles[filename]; !ok {
+		err = errors.New(fmt.Sprintf("No file with name %s exists for the step with rank %d", filename, stepRank))
+	}
+	return
+}
+
+// Gets the output file names of the given step number and having the given name
+//
+// If the step does not exist, returns an error.
+func (ws *WorkflowStatus) StepOutFileNames(stepRank int) (fileNames []string, err error) {
+	var ok bool
+	var outfiles map[string]string
+	if outfiles, ok = ws.outfiles[stepRank]; !ok {
+		err = errors.New(fmt.Sprintf("No Step with rank %d exists", stepRank))
+	}
+	fileNames = make([]string, 0, len(outfiles))
+	for name, _ := range outfiles {
+		fileNames = append(fileNames, name)
+	}
+	return
+}
+
+// Gets the status of the given step number
+//
+// If the step number does not exist, then returns an error
+func (ws *WorkflowStatus) StepStatus(stepRank int) (status string, err error) {
+	var ok bool
+	if status, ok = ws.stepStatus[stepRank]; !ok {
+		err = errors.New(fmt.Sprintf("No Step with rank %d exists", stepRank))
+	}
+	return
+}
+
+// Gets the list of all the step ranks/numbers
+func (ws *WorkflowStatus) ListStepRanks() (stepRanks []int) {
+	stepRanks = make([]int, 0, len(ws.stepStatus))
+	for rank, _ := range ws.stepStatus {
+		stepRanks = append(stepRanks, rank)
+	}
+	sort.Ints(stepRanks)
 	return
 }
