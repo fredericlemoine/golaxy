@@ -342,27 +342,12 @@ func (g *Galaxy) Version() (version string, err error) {
 // and returns its id
 func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
 	var url string = g.url + HISTORY + "?key=" + g.apikey
-	var req *http.Request
-	var resp *http.Response
 	var answer historyResponse
-	var body []byte
 
-	if req, err = http.NewRequest("POST", url, bytes.NewBuffer([]byte("{\"name\":\""+name+"\"}"))); err != nil {
+	if err = g.galaxyPostRequestJSON(url, []byte("{\"name\":\""+name+"\"}"), &answer); err != nil {
 		return
 	}
 
-	if resp, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		return
-	}
-
-	if err = json.Unmarshal(body, &answer); err != nil {
-		return
-	}
 	if answer.Err_code != 0 {
 		err = errors.New(answer.Err_msg)
 		return
@@ -505,29 +490,16 @@ func (tl *ToolLaunch) AddParameter(paramname, paramvalue string) {
 func (g *Galaxy) LaunchTool(tl *ToolLaunch) (outfiles map[string]string, jobids []string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
 	var input []byte
-	var req *http.Request
-	var resp *http.Response
-	var body []byte
 	var answer toolResponse
 
 	if input, err = json.Marshal(tl); err != nil {
 		return
 	}
-	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(input)); err != nil {
+
+	if err = g.galaxyPostRequestJSON(url, input, &answer); err != nil {
 		return
 	}
 
-	if resp, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		return
-	}
-	if err = json.Unmarshal(body, &answer); err != nil {
-		return
-	}
 	if answer.Err_msg != "" {
 		err = errors.New(answer.Err_msg)
 		return
@@ -551,25 +523,12 @@ func (g *Galaxy) LaunchTool(tl *ToolLaunch) (outfiles map[string]string, jobids 
 // 	- Output files: map : key: out filename value: out file id
 func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]string, err error) {
 	var url string = g.url + CHECK_JOB + "/" + jobid + "?key=" + g.apikey
-	var req *http.Request
-	var response *http.Response
-	var body []byte
 	var answer job
-	if req, err = http.NewRequest("GET", url, nil); err != nil {
-		return
-	}
-	if response, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer response.Body.Close()
 
-	if body, err = ioutil.ReadAll(response.Body); err != nil {
+	if err = g.galaxyGetRequestJSON(url, &answer); err != nil {
 		return
 	}
 
-	if err = json.Unmarshal(body, &answer); err != nil {
-		return
-	}
 	if answer.Err_code != 0 {
 		err = errors.New(answer.Err_msg)
 		return
@@ -589,21 +548,7 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 // 	- A potential error
 func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err error) {
 	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display" + "?key=" + g.apikey
-	var req *http.Request
-	var response *http.Response
-
-	if req, err = http.NewRequest("GET", url, nil); err != nil {
-		return
-	}
-
-	if response, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer response.Body.Close()
-
-	if content, err = ioutil.ReadAll(response.Body); err != nil {
-		return
-	}
+	content, err = g.galaxyGetRequestBytes(url)
 	return
 }
 
@@ -613,25 +558,12 @@ func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err err
 // 	- A potential error
 func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 	var url string = g.url + HISTORY + "/" + historyid + "?key=" + g.apikey
-	var req *http.Request
-	var response *http.Response
-	var body []byte
 	var answer historyResponse
 
-	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer([]byte("{\"purge\":\"true\"}")))
-
-	if response, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer response.Body.Close()
-
-	if body, err = ioutil.ReadAll(response.Body); err != nil {
+	if err = g.galaxyDeleteRequestJSON(url, []byte("{\"purge\":\"true\"}"), &answer); err != nil {
 		return
 	}
 
-	if err = json.Unmarshal(body, &answer); err != nil {
-		return
-	}
 	if answer.Err_code != 0 {
 		err = errors.New(answer.Err_msg)
 		return
@@ -672,47 +604,13 @@ func (g *Galaxy) SearchToolID(name string) (toolIds []string, err error) {
 
 func (g *Galaxy) getToolById(id string) (tool toolInfo, err error) {
 	var url string = g.url + TOOLS + "/" + id
-	var req *http.Request
-	var resp *http.Response
-	var body []byte
-
-	if req, err = http.NewRequest("GET", url, nil); err != nil {
-		return
-	}
-
-	if resp, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		return
-	}
-	err = json.Unmarshal(body, &tool)
+	err = g.galaxyGetRequestJSON(url, &tool)
 	return
 }
 
 func (g *Galaxy) searchToolIDsByName(name string) (ids []string, err error) {
 	var url string = g.url + TOOLS + "?q=" + name
-
-	var req *http.Request
-	var resp *http.Response
-	var body []byte
-
-	if req, err = http.NewRequest("GET", url, nil); err != nil {
-		return
-	}
-
-	if resp, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		return
-	}
-
-	err = json.Unmarshal(body, &ids)
+	err = g.galaxyGetRequestJSON(url, &ids)
 	return
 }
 
@@ -735,28 +633,12 @@ func (g *Galaxy) SearchWorkflowIDs(name string) (ids []string, err error) {
 func (g *Galaxy) GetWorkflowByID(inputid string) (wf WorkflowInfo, err error) {
 	var url string = g.url + WORKFLOWS + "/" + inputid + "?key=" + g.apikey
 
-	var req *http.Request
-	var resp *http.Response
-	var body []byte
-
-	if req, err = http.NewRequest("GET", url, nil); err != nil {
+	if err = g.galaxyDeleteRequestJSON(url, []byte{}, &wf); err != nil {
 		return
 	}
 
-	if resp, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		return
-	}
-
-	if err = json.Unmarshal(body, &wf); err != nil {
-		return
-	} else if wf.Err_Code != 0 {
+	if wf.Err_Code != 0 {
 		err = errors.New(wf.Err_Msg)
-		return
 	}
 
 	return
@@ -765,8 +647,6 @@ func (g *Galaxy) GetWorkflowByID(inputid string) (wf WorkflowInfo, err error) {
 func (g *Galaxy) searchWorkflowIDsByName(name string) (ids []string, err error) {
 	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
 
-	var req *http.Request
-	var resp *http.Response
 	var body []byte
 	var wfs []WorkflowInfo
 	var galaxyErr genericError
@@ -774,23 +654,12 @@ func (g *Galaxy) searchWorkflowIDsByName(name string) (ids []string, err error) 
 
 	ids = make([]string, 0)
 
-	if req, err = http.NewRequest("GET", url, nil); err != nil {
+	if body, err = g.galaxyGetRequestBytes(url); err != nil {
 		return
 	}
 
-	if resp, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		return
-	}
-
-	err = json.Unmarshal(body, &wfs)
-	if err != nil {
-		err = json.Unmarshal(body, &galaxyErr)
-		if err != nil {
+	if err = json.Unmarshal(body, &wfs); err != nil {
+		if err = json.Unmarshal(body, &galaxyErr); err != nil {
 			return
 		}
 		if galaxyErr.Err_Code != 0 {
@@ -851,9 +720,6 @@ func (wl *WorkflowLaunch) AddParameter(stepIndex int, paramName string, paramVal
 func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocation, err error) {
 	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
 	var input []byte
-	var req *http.Request
-	var resp *http.Response
-	var body []byte
 
 	answer = &WorkflowInvocation{}
 
@@ -861,27 +727,13 @@ func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocat
 		return
 	}
 
-	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(input)); err != nil {
+	if err = g.galaxyPostRequestJSON(url, input, answer); err != nil {
 		return
 	}
 
-	if resp, err = g.newClient().Do(req); err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		return
-	}
-
-	if err = json.Unmarshal(body, answer); err != nil {
-		return
-	}
 	if answer.Err_Code != 0 {
 		err = errors.New(answer.Err_Msg)
-		return
 	}
-
 	return
 }
 
@@ -1018,6 +870,25 @@ func (ws *WorkflowStatus) ListStepRanks() (stepRanks []int) {
 }
 
 // Requests the given url using GET.
+// and returns the response in Bytes
+func (g *Galaxy) galaxyGetRequestBytes(url string) (answer []byte, err error) {
+	var req *http.Request
+	var response *http.Response
+
+	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		return
+	}
+
+	if response, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer response.Body.Close()
+
+	answer, err = ioutil.ReadAll(response.Body)
+	return
+}
+
+// Requests the given url using GET.
 // and unmarshalls the resulting expected
 // resulting json into the given structure
 func (g *Galaxy) galaxyGetRequestJSON(url string, answer interface{}) (err error) {
@@ -1028,6 +899,52 @@ func (g *Galaxy) galaxyGetRequestJSON(url string, answer interface{}) (err error
 	if req, err = http.NewRequest("GET", url, nil); err != nil {
 		return
 	}
+
+	if response, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer response.Body.Close()
+
+	if body, err = ioutil.ReadAll(response.Body); err != nil {
+		return
+	}
+
+	err = json.Unmarshal(body, answer)
+	return
+}
+
+// Send data to the given url using POST,
+// and unmarshalls the expected resulting json into the given structure.
+func (g *Galaxy) galaxyPostRequestJSON(url string, data []byte, answer interface{}) (err error) {
+	var req *http.Request
+	var resp *http.Response
+	var body []byte
+
+	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(data)); err != nil {
+		return
+	}
+
+	if resp, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if body, err = ioutil.ReadAll(resp.Body); err != nil {
+		return
+	}
+
+	err = json.Unmarshal(body, answer)
+	return
+}
+
+// Requests the given url using DELETE.
+// and unmarshalls the expected resulting json into the given structure
+func (g *Galaxy) galaxyDeleteRequestJSON(url string, data []byte, answer interface{}) (err error) {
+	var req *http.Request
+	var response *http.Response
+	var body []byte
+
+	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
 
 	if response, err = g.newClient().Do(req); err != nil {
 		return
