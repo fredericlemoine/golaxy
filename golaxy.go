@@ -17,6 +17,14 @@ import (
 	"strings"
 )
 
+// Version of galaxy, returned by /api/version
+type galaxyVersion struct {
+	Extra         interface{} `json:"extra"`
+	Version_major string      `json:"version_major"`
+	Err_msg       string      `json:"err_msg"`  // In case of error, this field is !=""
+	Err_code      int         `json:"err_code"` // In case of error, this field is !=0
+}
+
 // Response after the creation/deletion of a history
 type historyResponse struct {
 	Importable        bool         `json:"importable"`
@@ -299,6 +307,7 @@ const (
 	CHECK_JOB = "/api/jobs/"
 	TOOLS     = "/api/tools"
 	WORKFLOWS = "/api/workflows"
+	VERSION   = "/api/version"
 )
 
 // Initializes a new Galaxy with given:
@@ -310,6 +319,23 @@ func NewGalaxy(url, key string, trustcertificate bool) *Galaxy {
 		key,
 		trustcertificate,
 	}
+}
+
+func (g *Galaxy) Version() (version string, err error) {
+	var url string = g.url + VERSION
+	var answer galaxyVersion
+
+	if err = g.galaxyGetRequestJSON(url, &answer); err != nil {
+		return
+	}
+
+	if answer.Err_code != 0 {
+		err = errors.New(answer.Err_msg)
+		return
+	}
+
+	version = answer.Version_major
+	return
 }
 
 // Creates an history with given name on the Galaxy instance
@@ -988,5 +1014,30 @@ func (ws *WorkflowStatus) ListStepRanks() (stepRanks []int) {
 		stepRanks = append(stepRanks, rank)
 	}
 	sort.Ints(stepRanks)
+	return
+}
+
+// Requests the given url using GET.
+// and unmarshalls the resulting expected
+// resulting json into the given structure
+func (g *Galaxy) galaxyGetRequestJSON(url string, answer interface{}) (err error) {
+	var req *http.Request
+	var response *http.Response
+	var body []byte
+
+	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		return
+	}
+
+	if response, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer response.Body.Close()
+
+	if body, err = ioutil.ReadAll(response.Body); err != nil {
+		return
+	}
+
+	err = json.Unmarshal(body, answer)
 	return
 }
