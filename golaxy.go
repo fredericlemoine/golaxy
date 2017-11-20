@@ -26,35 +26,35 @@ type galaxyVersion struct {
 }
 
 // Response after the creation/deletion of a history
-type historyResponse struct {
-	Importable        bool         `json:"importable"`
-	Create_time       string       `json:"create_time"`
-	Contents_url      string       `json:"contente_url"`
-	Id                string       `json:"id"`
-	Size              int          `json:"size"`
-	User_id           string       `json:"user_id"`
-	Username_and_slug string       `json:"username_and_slug"`
-	Annotation        string       `json:"annotation"`
-	State_details     stateDetails `json:"state_details"`
-	State             string       `json:"state"`
-	Empty             bool         `json:"empty"`
-	Update_time       string       `json:"update_time"`
-	Tags              []string     `json:"tags"`
-	Deleted           bool         `json:"deleted"`
-	Genome_build      string       `json:"genome_build"`
-	Slug              string       `json:"slug"`
-	Name              string       `json:"name"`
-	Url               string       `json:"url"`
-	State_ids         stateIds     `json:"state_ids"`
-	Published         bool         `json:"published"`
-	Model_class       string       `json:"model_class"`
-	Purged            bool         `json:"purged"`
-	Err_msg           string       `json:"err_msg"`  // In case of error, this field is !=""
-	Err_code          int          `json:"err_code"` // In case of error, this field is !=0
+type HistoryFullInfo struct {
+	Importable        bool                `json:"importable"`
+	Create_time       string              `json:"create_time"`
+	Contents_url      string              `json:"contente_url"`
+	Id                string              `json:"id"`
+	Size              int                 `json:"size"`
+	User_id           string              `json:"user_id"`
+	Username_and_slug string              `json:"username_and_slug"`
+	Annotation        string              `json:"annotation"`
+	State_details     HistoryStateDetails `json:"state_details"`
+	State             string              `json:"state"`
+	Empty             bool                `json:"empty"`
+	Update_time       string              `json:"update_time"`
+	Tags              []string            `json:"tags"`
+	Deleted           bool                `json:"deleted"`
+	Genome_build      string              `json:"genome_build"`
+	Slug              string              `json:"slug"`
+	Name              string              `json:"name"`
+	Url               string              `json:"url"`
+	State_ids         HistoryStateIds     `json:"state_ids"`
+	Published         bool                `json:"published"`
+	Model_class       string              `json:"model_class"`
+	Purged            bool                `json:"purged"`
+	Err_msg           string              `json:"err_msg"`  // In case of error, this field is !=""
+	Err_code          int                 `json:"err_code"` // In case of error, this field is !=0
 }
 
 // Detail of the job state
-type stateDetails struct {
+type HistoryStateDetails struct {
 	Paused           int `json:"paused"`
 	Ok               int `json:"ok"`
 	Failed_metadata  int `json:"failed_metadata"`
@@ -69,7 +69,7 @@ type stateDetails struct {
 }
 
 // Id of jobs in different states
-type stateIds struct {
+type HistoryStateIds struct {
 	Paused           []string `json:"paused"`
 	Ok               []string `json:"ok"`
 	Failed_metadata  []string `json:"failed_metadata"`
@@ -81,6 +81,18 @@ type stateIds struct {
 	New              []string `json:"new"`
 	Queued           []string `json:"queued"`
 	Empty            []string `json:"empty"`
+}
+
+type HistoryShortInfo struct {
+	Annotation  string   `json:"annotation"`
+	Deleted     bool     `json:"deleted"`
+	Id          string   `json:"id"`
+	Model_class string   `json:"model_class"`
+	Name        string   `json:"name"`
+	Published   bool     `json:"published"`
+	Purged      bool     `json:"purged"`
+	Tags        []string `json:"tags"`
+	Url         string   `json:"url"`
 }
 
 // Request for fileupload
@@ -340,11 +352,55 @@ func (g *Galaxy) Version() (version string, err error) {
 
 // Creates an history with given name on the Galaxy instance
 // and returns its id
-func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
+func (g *Galaxy) CreateHistory(name string) (history HistoryFullInfo, err error) {
 	var url string = g.url + HISTORY + "?key=" + g.apikey
-	var answer historyResponse
 
-	if err = g.galaxyPostRequestJSON(url, []byte("{\"name\":\""+name+"\"}"), &answer); err != nil {
+	if err = g.galaxyPostRequestJSON(url, []byte("{\"name\":\""+name+"\"}"), &history); err != nil {
+		return
+	}
+
+	if history.Err_code != 0 || history.Err_msg != "" {
+		err = errors.New(history.Err_msg)
+		return
+	}
+	return
+}
+
+func (g *Galaxy) ListHistories() (histories []HistoryShortInfo, err error) {
+	var url string = g.url + HISTORY + "?key=" + g.apikey
+	var body []byte
+	var galaxyErr genericError
+
+	if body, err = g.galaxyGetRequestBytes(url); err != nil {
+		return
+	}
+
+	// If we cannot unmarshall the []HistoryShortInfo
+	// The we try to unmarshall it as a galaxyError
+	if err = json.Unmarshal(body, &histories); err != nil {
+		if err = json.Unmarshal(body, &galaxyErr); err != nil {
+			return
+		}
+		if galaxyErr.Err_Code != 0 || galaxyErr.Err_Msg != "" {
+			err = errors.New(galaxyErr.Err_Msg)
+		} else {
+			err = errors.New("Error while listing histories")
+		}
+		return
+	}
+
+	return
+}
+
+// Deletes and purges an history defined by its id
+// Returns:
+// 	- The state of the deletion ("ok")
+// 	- A potential error
+func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
+	var url string = g.url + HISTORY + "/" + historyid + "?key=" + g.apikey
+	var answer HistoryFullInfo
+
+	if err = g.galaxyDeleteRequestJSON(url, []byte("{\"purge\":\"true\"}"), &answer); err != nil {
 		return
 	}
 
@@ -352,7 +408,8 @@ func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
 		err = errors.New(answer.Err_msg)
 		return
 	}
-	historyid = answer.Id
+
+	state = answer.State
 	return
 }
 
@@ -469,6 +526,16 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	return
 }
 
+// Downloads a file defined by its id from the given history of the galaxy instance
+// Returns:
+// 	- The content of the file in []byte
+// 	- A potential error
+func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err error) {
+	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display" + "?key=" + g.apikey
+	content, err = g.galaxyGetRequestBytes(url)
+	return
+}
+
 // Initializes a ToolLaunch that will be used to start a new job with the given tool
 // on the given history
 func (g *Galaxy) NewToolLauncher(historyid string, toolid string) (tl *ToolLaunch) {
@@ -559,58 +626,6 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 	return
 }
 
-// Downloads a file defined by its id from the given history of the galaxy instance
-// Returns:
-// 	- The content of the file in []byte
-// 	- A potential error
-func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err error) {
-	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display" + "?key=" + g.apikey
-	content, err = g.galaxyGetRequestBytes(url)
-	return
-}
-
-// Deletes and purges an history defined by its id
-// Returns:
-// 	- The state of the deletion ("ok")
-// 	- A potential error
-func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
-	var url string = g.url + HISTORY + "/" + historyid + "?key=" + g.apikey
-	var answer historyResponse
-
-	if err = g.galaxyDeleteRequestJSON(url, []byte("{\"purge\":\"true\"}"), &answer); err != nil {
-		return
-	}
-
-	if answer.Err_code != 0 || answer.Err_msg != "" {
-		err = errors.New(answer.Err_msg)
-		return
-	}
-
-	state = answer.State
-	return
-}
-
-// Deletes a Workflow defined by its id
-// 	- The state of the deletion ("Workflow '<name>' successfully deleted" for example)
-// 	- A potential error if the workflow cannot be deleted (server response does not contain "successfully deleted")
-func (g *Galaxy) DeleteWorkflow(workflowid string) (state string, err error) {
-	var url string = g.url + WORKFLOWS + "/" + workflowid + "?key=" + g.apikey
-	var answer []byte
-
-	if answer, err = g.galaxyDeleteRequestBytes(url, []byte{}); err != nil {
-		return
-	}
-
-	state = string(answer)
-
-	// No json response from the server, just a message we must parse
-	if !strings.Contains(state, "successfully deleted") {
-		err = errors.New(state)
-	}
-
-	return
-}
-
 func (g *Galaxy) newClient() *http.Client {
 	config := &tls.Config{InsecureSkipVerify: g.trustcertificate} // this line here
 	tr := &http.Transport{TLSClientConfig: config}
@@ -660,7 +675,7 @@ func (g *Galaxy) searchToolIDsByName(name string) (ids []string, err error) {
 func (g *Galaxy) SearchWorkflowIDs(name string) (ids []string, err error) {
 	var wf WorkflowInfo
 	if wf, err = g.GetWorkflowByID(name); err != nil {
-		ids, err = g.searchWorkflowIDsByName(name)
+		ids, err = g.SearchWorkflowIDsByName(name)
 	} else {
 		ids = []string{wf.Id}
 	}
@@ -681,7 +696,7 @@ func (g *Galaxy) GetWorkflowByID(inputid string) (wf WorkflowInfo, err error) {
 	return
 }
 
-func (g *Galaxy) searchWorkflowIDsByName(name string) (ids []string, err error) {
+func (g *Galaxy) SearchWorkflowIDsByName(name string) (ids []string, err error) {
 	var wfs []WorkflowInfo
 	var r *regexp.Regexp
 
@@ -726,6 +741,27 @@ func (g *Galaxy) ListWorkflows() (workflows []WorkflowInfo, err error) {
 		}
 		return
 	}
+	return
+}
+
+// Deletes a Workflow defined by its id
+// 	- The state of the deletion ("Workflow '<name>' successfully deleted" for example)
+// 	- A potential error if the workflow cannot be deleted (server response does not contain "successfully deleted")
+func (g *Galaxy) DeleteWorkflow(workflowid string) (state string, err error) {
+	var url string = g.url + WORKFLOWS + "/" + workflowid + "?key=" + g.apikey
+	var answer []byte
+
+	if answer, err = g.galaxyDeleteRequestBytes(url, []byte{}); err != nil {
+		return
+	}
+
+	state = string(answer)
+
+	// No json response from the server, just a message we must parse
+	if !strings.Contains(state, "successfully deleted") {
+		err = errors.New(state)
+	}
+
 	return
 }
 
