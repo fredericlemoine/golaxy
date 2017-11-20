@@ -590,6 +590,27 @@ func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 	return
 }
 
+// Deletes a Workflow defined by its id
+// 	- The state of the deletion ("Workflow '<name>' successfully deleted" for example)
+// 	- A potential error if the workflow cannot be deleted (server response does not contain "successfully deleted")
+func (g *Galaxy) DeleteWorkflow(workflowid string) (state string, err error) {
+	var url string = g.url + WORKFLOWS + "/" + workflowid + "?key=" + g.apikey
+	var answer []byte
+
+	if answer, err = g.galaxyDeleteRequestBytes(url, []byte{}); err != nil {
+		return
+	}
+
+	state = string(answer)
+
+	// No json response from the server, just a message we must parse
+	if !strings.Contains(state, "successfully deleted") {
+		err = errors.New(state)
+	}
+
+	return
+}
+
 func (g *Galaxy) newClient() *http.Client {
 	config := &tls.Config{InsecureSkipVerify: g.trustcertificate} // this line here
 	tr := &http.Transport{TLSClientConfig: config}
@@ -974,5 +995,24 @@ func (g *Galaxy) galaxyDeleteRequestJSON(url string, data []byte, answer interfa
 	}
 
 	err = json.Unmarshal(body, answer)
+	return
+}
+
+// Requests the given url using DELETE.
+// and returns the response byte content
+func (g *Galaxy) galaxyDeleteRequestBytes(url string, data []byte) (answer []byte, err error) {
+	var req *http.Request
+	var response *http.Response
+
+	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
+
+	if response, err = g.newClient().Do(req); err != nil {
+		return
+	}
+	defer response.Body.Close()
+
+	if answer, err = ioutil.ReadAll(response.Body); err != nil {
+		return
+	}
 	return
 }
