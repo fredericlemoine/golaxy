@@ -703,6 +703,7 @@ func (g *Galaxy) searchWorkflowIDsByName(name string) (ids []string, err error) 
 	return
 }
 
+// Lists all the workflows imported in the user's account
 func (g *Galaxy) ListWorkflows() (workflows []WorkflowInfo, err error) {
 	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
 	var body []byte
