@@ -329,7 +329,7 @@ func (g *Galaxy) Version() (version string, err error) {
 		return
 	}
 
-	if answer.Err_code != 0 {
+	if answer.Err_code != 0 || answer.Err_msg != "" {
 		err = errors.New(answer.Err_msg)
 		return
 	}
@@ -348,7 +348,7 @@ func (g *Galaxy) CreateHistory(name string) (historyid string, err error) {
 		return
 	}
 
-	if answer.Err_code != 0 {
+	if answer.Err_code != 0 || answer.Err_msg != "" {
 		err = errors.New(answer.Err_msg)
 		return
 	}
@@ -546,7 +546,7 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 		return
 	}
 
-	if answer.Err_code != 0 {
+	if answer.Err_code != 0 || answer.Err_msg != "" {
 		err = errors.New(answer.Err_msg)
 		return
 	}
@@ -581,7 +581,7 @@ func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 		return
 	}
 
-	if answer.Err_code != 0 {
+	if answer.Err_code != 0 || answer.Err_msg != "" {
 		err = errors.New(answer.Err_msg)
 		return
 	}
@@ -650,14 +650,13 @@ func (g *Galaxy) SearchWorkflowIDs(name string) (ids []string, err error) {
 func (g *Galaxy) GetWorkflowByID(inputid string) (wf WorkflowInfo, err error) {
 	var url string = g.url + WORKFLOWS + "/" + inputid + "?key=" + g.apikey
 
-	if err = g.galaxyDeleteRequestJSON(url, []byte{}, &wf); err != nil {
+	if err = g.galaxyGetRequestJSON(url, &wf); err != nil {
 		return
 	}
 
-	if wf.Err_Code != 0 {
+	if wf.Err_Code != 0 || wf.Err_Msg != "" {
 		err = errors.New(wf.Err_Msg)
 	}
-
 	return
 }
 
@@ -679,7 +678,7 @@ func (g *Galaxy) searchWorkflowIDsByName(name string) (ids []string, err error) 
 		if err = json.Unmarshal(body, &galaxyErr); err != nil {
 			return
 		}
-		if galaxyErr.Err_Code != 0 {
+		if galaxyErr.Err_Code != 0 || galaxyErr.Err_Msg != "" {
 			err = errors.New(galaxyErr.Err_Msg)
 		} else {
 			err = errors.New("Error while Searching Workflows ID by Namee")
@@ -748,7 +747,7 @@ func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocat
 		return
 	}
 
-	if answer.Err_Code != 0 {
+	if answer.Err_Code != 0 || answer.Err_Msg != "" {
 		err = errors.New(answer.Err_Msg)
 	}
 	return
