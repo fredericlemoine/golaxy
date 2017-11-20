@@ -682,28 +682,12 @@ func (g *Galaxy) GetWorkflowByID(inputid string) (wf WorkflowInfo, err error) {
 }
 
 func (g *Galaxy) searchWorkflowIDsByName(name string) (ids []string, err error) {
-	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
-
-	var body []byte
 	var wfs []WorkflowInfo
-	var galaxyErr genericError
 	var r *regexp.Regexp
 
 	ids = make([]string, 0)
 
-	if body, err = g.galaxyGetRequestBytes(url); err != nil {
-		return
-	}
-
-	if err = json.Unmarshal(body, &wfs); err != nil {
-		if err = json.Unmarshal(body, &galaxyErr); err != nil {
-			return
-		}
-		if galaxyErr.Err_Code != 0 || galaxyErr.Err_Msg != "" {
-			err = errors.New(galaxyErr.Err_Msg)
-		} else {
-			err = errors.New("Error while Searching Workflows ID by Namee")
-		}
+	if wfs, err = g.ListWorkflows(); err != nil {
 		return
 	}
 
@@ -715,6 +699,31 @@ func (g *Galaxy) searchWorkflowIDsByName(name string) (ids []string, err error) 
 		if ok := r.MatchString(strings.ToLower(wf.Name)); ok {
 			ids = append(ids, wf.Id)
 		}
+	}
+	return
+}
+
+func (g *Galaxy) ListWorkflows() (workflows []WorkflowInfo, err error) {
+	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
+	var body []byte
+	var galaxyErr genericError
+
+	if body, err = g.galaxyGetRequestBytes(url); err != nil {
+		return
+	}
+
+	// If we cannot unmarshall the []WorkflowInfo
+	// The we try to unmarshall it as a galaxyError
+	if err = json.Unmarshal(body, &workflows); err != nil {
+		if err = json.Unmarshal(body, &galaxyErr); err != nil {
+			return
+		}
+		if galaxyErr.Err_Code != 0 || galaxyErr.Err_Msg != "" {
+			err = errors.New(galaxyErr.Err_Msg)
+		} else {
+			err = errors.New("Error while listing workflows")
+		}
+		return
 	}
 	return
 }
