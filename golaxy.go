@@ -373,6 +373,11 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	var postresponse *http.Response
 	var answer toolResponse
 
+	if historyid == "" {
+		err = errors.New("UploadFile input history id is not valid")
+		return
+	}
+
 	if file, err = os.Open(path); err != nil {
 		return
 	}
@@ -382,17 +387,21 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	writer = multipart.NewWriter(body)
 
 	if part, err = writer.CreateFormFile("files_0|file_data", filepath.Base(path)); err != nil {
+		err = errors.New("Error while creating upload file form: " + err.Error())
 		return
 	}
 
 	if _, err = io.Copy(part, file); err != nil {
+		err = errors.New("Error while copying file content to form: " + err.Error())
 		return
 	}
 
 	if err = writer.WriteField("history_id", historyid); err != nil {
+		err = errors.New("Error while writing history id to form: " + err.Error())
 		return
 	}
 	if err = writer.WriteField("tool_id", "upload1"); err != nil {
+		err = errors.New("Error while writing tool id to form: " + err.Error())
 		return
 	}
 
@@ -405,34 +414,42 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 		"upload_dataset",
 	}
 	if input, err = json.Marshal(fileinput); err != nil {
+		err = errors.New("Error while marshaling fileinput: " + err.Error())
 		return
 	}
+
 	if err = writer.WriteField("inputs", string(input)); err != nil {
+		err = errors.New("Error while writing file inputs to form: " + err.Error())
 		return
 	}
 
 	if err = writer.Close(); err != nil {
+		err = errors.New("Error while closing form writer: " + err.Error())
 		return
 	}
 
 	if postrequest, err = http.NewRequest("POST", url, body); err != nil {
+		err = errors.New("Error while creating new POST request: " + err.Error())
 		return
 	}
 	postrequest.Header.Set("Content-Type", writer.FormDataContentType())
 
 	if postresponse, err = g.newClient().Do(postrequest); err != nil {
+		err = errors.New("Error while POSTing form: " + err.Error())
 		return
 	}
 	defer postresponse.Body.Close()
 
 	if body2, err = ioutil.ReadAll(postresponse.Body); err != nil {
+		err = errors.New("Error while reading server respone: " + err.Error())
 		return
 	}
 
 	if err = json.Unmarshal(body2, &answer); err != nil {
+		err = errors.New("Error while unmarsheling server respone: " + err.Error())
 		return
 	}
-	if answer.Err_code != 0 {
+	if answer.Err_msg != "" {
 		err = errors.New(answer.Err_msg)
 		return
 	}
@@ -742,6 +759,7 @@ func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocat
 // It returns workflowstatus: An indicator of the whole workflow status,
 // its step status, and its step outputfiles. The whole status is computed as follows:
 //		* If all steps are "ok": then  == "ok"
+//              * Else if one step is "error": then == "error"
 //		* Else if one step is "deleted": then == "deleted"
 //		* Else if one step is "running": then == "running"
 //		* Else if one step is "queued": then == "queued"
@@ -788,6 +806,8 @@ func (g *Galaxy) CheckWorkflow(wfi *WorkflowInvocation) (wfstatus *WorkflowStatu
 
 	if sum, ok = cumstate["ok"]; ok && sum == numjobsids {
 		wfstatus.wfStatus = "ok"
+	} else if sum, ok = cumstate["error"]; ok && sum >= 1 {
+		wfstatus.wfStatus = "error"
 	} else if sum, ok = cumstate["deleted"]; ok && sum >= 1 {
 		wfstatus.wfStatus = "deleted"
 	} else if sum, ok = cumstate["running"]; ok && sum >= 1 {
@@ -801,7 +821,6 @@ func (g *Galaxy) CheckWorkflow(wfi *WorkflowInvocation) (wfstatus *WorkflowStatu
 	} else {
 		wfstatus.wfStatus = "unknown"
 	}
-
 	return
 }
 
