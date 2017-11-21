@@ -917,6 +917,29 @@ func (g *Galaxy) CheckWorkflow(wfi *WorkflowInvocation) (wfstatus *WorkflowStatu
 	return
 }
 
+// Cancels a running workflow.
+//
+// TODO: handle json response from the server in case of success... nothing described.
+func (g *Galaxy) DeleteWorkflowRun(wfi *WorkflowInvocation) (err error) {
+	var url string = g.url + WORKFLOWS + "/" + wfi.Workflow_Id + "/invocations/" + wfi.Id + "?key=" + g.apikey
+	var answer []byte
+	var galaxyErr genericError
+
+	if answer, err = g.galaxyDeleteRequestBytes(url, []byte{}); err != nil {
+		return
+	}
+
+	// If we cannot unmarshall the []HistoryShortInfo
+	// The we try to unmarshall it as a galaxyError
+	if err = json.Unmarshal(answer, &galaxyErr); err == nil {
+		if galaxyErr.Err_Code != 0 || galaxyErr.Err_Msg != "" {
+			err = errors.New(galaxyErr.Err_Msg)
+		}
+	}
+
+	return
+}
+
 // Returns the global status of the workflow. It is computed as follows:
 //		* If all steps are "ok": then  == "ok"
 //		* Else if one step is "deleted": then == "deleted"
