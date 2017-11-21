@@ -672,10 +672,10 @@ func (g *Galaxy) searchToolIDsByName(name string) (ids []string, err error) {
 // It will first search for a workflow with ID exactly equal to the given name.
 // If it does not exist, then will search a workflow having a lower(name) matching
 // containing the given lower(name).
-func (g *Galaxy) SearchWorkflowIDs(name string) (ids []string, err error) {
+func (g *Galaxy) SearchWorkflowIDs(name string, published bool) (ids []string, err error) {
 	var wf WorkflowInfo
-	if wf, err = g.GetWorkflowByID(name); err != nil {
-		ids, err = g.SearchWorkflowIDsByName(name)
+	if wf, err = g.GetWorkflowByID(name, published); err != nil {
+		ids, err = g.SearchWorkflowIDsByName(name, published)
 	} else {
 		ids = []string{wf.Id}
 	}
@@ -683,8 +683,13 @@ func (g *Galaxy) SearchWorkflowIDs(name string) (ids []string, err error) {
 }
 
 // Call galaxy api to look for a workflow with the given ID
-func (g *Galaxy) GetWorkflowByID(inputid string) (wf WorkflowInfo, err error) {
+//
+// If published: then search the workflow in the published+imported workflows
+func (g *Galaxy) GetWorkflowByID(inputid string, published bool) (wf WorkflowInfo, err error) {
 	var url string = g.url + WORKFLOWS + "/" + inputid + "?key=" + g.apikey
+	if published {
+		url += "&show_published=true"
+	}
 
 	if err = g.galaxyGetRequestJSON(url, &wf); err != nil {
 		return
@@ -696,13 +701,16 @@ func (g *Galaxy) GetWorkflowByID(inputid string) (wf WorkflowInfo, err error) {
 	return
 }
 
-func (g *Galaxy) SearchWorkflowIDsByName(name string) (ids []string, err error) {
+// Searches workflow ids by name.
+//
+// If published: then search the workflow in the published+imported workflows
+func (g *Galaxy) SearchWorkflowIDsByName(name string, published bool) (ids []string, err error) {
 	var wfs []WorkflowInfo
 	var r *regexp.Regexp
 
 	ids = make([]string, 0)
 
-	if wfs, err = g.ListWorkflows(); err != nil {
+	if wfs, err = g.ListWorkflows(published); err != nil {
 		return
 	}
 
@@ -719,10 +727,16 @@ func (g *Galaxy) SearchWorkflowIDsByName(name string) (ids []string, err error) 
 }
 
 // Lists all the workflows imported in the user's account
-func (g *Galaxy) ListWorkflows() (workflows []WorkflowInfo, err error) {
+//
+// If published: then lists published+imported workflows
+func (g *Galaxy) ListWorkflows(published bool) (workflows []WorkflowInfo, err error) {
 	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
 	var body []byte
 	var galaxyErr genericError
+
+	if published {
+		url += "&show_published=true"
+	}
 
 	if body, err = g.galaxyGetRequestBytes(url); err != nil {
 		return
@@ -744,35 +758,15 @@ func (g *Galaxy) ListWorkflows() (workflows []WorkflowInfo, err error) {
 	return
 }
 
-// Lists all the workflows (public and imported by the user)
-func (g *Galaxy) ListAllWorkflows() (workflows []WorkflowInfo, err error) {
-	var url string = g.url + WORKFLOWS + "?show_published=true&key=" + g.apikey
-	var body []byte
-	var galaxyErr genericError
-
-	if body, err = g.galaxyGetRequestBytes(url); err != nil {
-		return
-	}
-
-	// If we cannot unmarshall the []WorkflowInfo
-	// The we try to unmarshall it as a galaxyError
-	if err = json.Unmarshal(body, &workflows); err != nil {
-		if err = json.Unmarshal(body, &galaxyErr); err == nil {
-			if galaxyErr.Err_Code != 0 || galaxyErr.Err_Msg != "" {
-				err = errors.New(galaxyErr.Err_Msg)
-			} else {
-				err = errors.New("Error while listing workflows")
-			}
-		}
-	}
-	return
-}
-
 // Lists all the workflows imported in the user's account
 func (g *Galaxy) ImportSharedWorkflow(sharedworkflowid string) (workflow WorkflowInfo, err error) {
 	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
 
 	err = g.galaxyPostRequestJSON(url, []byte("{\"shared_workflow_id\":\""+sharedworkflowid+"\"}"), &workflow)
+
+	if err == nil && workflow.Err_Msg != "" || workflow.Err_Code != 0 {
+		err = errors.New(workflow.Err_Msg)
+	}
 
 	return
 }
