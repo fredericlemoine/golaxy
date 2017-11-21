@@ -212,21 +212,21 @@ type toolShedRepository struct {
 	Tool_shed          string `json:"tool_shed"`
 }
 
-type workflowInput struct {
+type WorkflowInput struct {
 	Label string `json:label`
 	Uuid  string `json:uuid`
 	Value string `json:uuid`
 }
 
-type workflowInputStep struct {
+type WorkflowInputStep struct {
 	Source_Step int    `json:"source_step"` // ID of the previous step serving as input here
 	Step_Output string `json:"step_output"` // Name of the output  of the previous step serving as input here
 }
 
-type workflowStep struct {
+type WorkflowStep struct {
 	Annotation   string                       `json:"annotation"`
 	Id           int                          `json:"id"`
-	Input_Steps  map[string]workflowInputStep `json:"input_steps"`
+	Input_Steps  map[string]WorkflowInputStep `json:"input_steps"`
 	Tool_Id      string                       `json:"tool_id"`
 	Tool_Inputs  map[string]string            `json:"tool_inputs"`
 	Tool_Version string                       `json:"tool_version"`
@@ -238,13 +238,13 @@ type WorkflowInfo struct {
 	Annotation           string                   `json:"annotation"`
 	Deleted              bool                     `json:"deleted"`
 	Id                   string                   `json:"id"`
-	Inputs               map[string]workflowInput `json:"inputs"`
+	Inputs               map[string]WorkflowInput `json:"inputs"`
 	Latest_Workflow_UUID string                   `json:"latest_workflow_uuid"`
 	Model_Class          string                   `json:"model_class"`
 	Name                 string                   `json:"name"`
 	Owner                string                   `json:"owner"`
 	Published            bool                     `json:"published"`
-	Steps                map[string]workflowStep  `json:"steps"`
+	Steps                map[string]WorkflowStep  `json:"steps"`
 	Tags                 []string                 `json:"tags"`
 	Url                  string                   `json:"url"`
 	Traceboack           string                   `json:"traceback"` // Set only if the server returns an error
@@ -741,6 +741,39 @@ func (g *Galaxy) ListWorkflows() (workflows []WorkflowInfo, err error) {
 		}
 		return
 	}
+	return
+}
+
+// Lists all the workflows (public and imported by the user)
+func (g *Galaxy) ListAllWorkflows() (workflows []WorkflowInfo, err error) {
+	var url string = g.url + WORKFLOWS + "?show_published=true&key=" + g.apikey
+	var body []byte
+	var galaxyErr genericError
+
+	if body, err = g.galaxyGetRequestBytes(url); err != nil {
+		return
+	}
+
+	// If we cannot unmarshall the []WorkflowInfo
+	// The we try to unmarshall it as a galaxyError
+	if err = json.Unmarshal(body, &workflows); err != nil {
+		if err = json.Unmarshal(body, &galaxyErr); err == nil {
+			if galaxyErr.Err_Code != 0 || galaxyErr.Err_Msg != "" {
+				err = errors.New(galaxyErr.Err_Msg)
+			} else {
+				err = errors.New("Error while listing workflows")
+			}
+		}
+	}
+	return
+}
+
+// Lists all the workflows imported in the user's account
+func (g *Galaxy) ImportSharedWorkflow(sharedworkflowid string) (workflow WorkflowInfo, err error) {
+	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
+
+	err = g.galaxyPostRequestJSON(url, []byte("{\"shared_workflow_id\":\""+sharedworkflowid+"\"}"), &workflow)
+
 	return
 }
 
