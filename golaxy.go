@@ -1011,10 +1011,12 @@ func (g *Galaxy) galaxyGetRequestBytes(url string) (answer []byte, err error) {
 	var response *http.Response
 
 	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		err = g.hideKeyFromError(err)
 		return
 	}
 
 	if response, err = g.newClient().Do(req); err != nil {
+		err = g.hideKeyFromError(err)
 		return
 	}
 	defer response.Body.Close()
@@ -1032,10 +1034,12 @@ func (g *Galaxy) galaxyGetRequestJSON(url string, answer interface{}) (err error
 	var body []byte
 
 	if req, err = http.NewRequest("GET", url, nil); err != nil {
+		err = g.hideKeyFromError(err)
 		return
 	}
 
 	if response, err = g.newClient().Do(req); err != nil {
+		err = g.hideKeyFromError(err)
 		return
 	}
 	defer response.Body.Close()
@@ -1056,10 +1060,12 @@ func (g *Galaxy) galaxyPostRequestJSON(url string, data []byte, answer interface
 	var body []byte
 
 	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(data)); err != nil {
+		err = g.hideKeyFromError(err)
 		return
 	}
 
 	if resp, err = g.newClient().Do(req); err != nil {
+		err = g.hideKeyFromError(err)
 		return
 	}
 	defer resp.Body.Close()
@@ -1082,6 +1088,7 @@ func (g *Galaxy) galaxyDeleteRequestJSON(url string, data []byte, answer interfa
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
 
 	if response, err = g.newClient().Do(req); err != nil {
+		err = g.hideKeyFromError(err)
 		return
 	}
 	defer response.Body.Close()
@@ -1103,6 +1110,7 @@ func (g *Galaxy) galaxyDeleteRequestBytes(url string, data []byte) (answer []byt
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
 
 	if response, err = g.newClient().Do(req); err != nil {
+		err = g.hideKeyFromError(err)
 		return
 	}
 	defer response.Body.Close()
@@ -1110,5 +1118,13 @@ func (g *Galaxy) galaxyDeleteRequestBytes(url string, data []byte) (answer []byt
 	if answer, err = ioutil.ReadAll(response.Body); err != nil {
 		return
 	}
+	return
+}
+
+// This function replaces the api key in url that might be written
+// in the error message by XXXXXXXXXXXXXXXXXX
+func (g *Galaxy) hideKeyFromError(inerr error) (outerr error) {
+	newMessage := strings.Replace(inerr.Error(), g.apikey, "XXXXXXXXXXXXXXXXXX", -1)
+	outerr = errors.New(newMessage)
 	return
 }
