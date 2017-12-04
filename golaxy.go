@@ -186,7 +186,7 @@ type toolInput struct {
 }
 
 // Informations about a specific tool
-type toolInfo struct {
+type ToolInfo struct {
 	Description          string             `json:"description"` // Description of the tool
 	Edam_operations      []string           `json:"edam_operations"`
 	Edam_topics          []string           `json:"edam_topics"`
@@ -197,7 +197,7 @@ type toolInfo struct {
 	Name                 string             `json:"name"`
 	Panel_Section_Id     string             `json:"panel_section_id"`
 	Panel_Section_Name   string             `json:"panel_section_name"`
-	Tool_Shed_Repository toolShedRepository `json:"tool_shed_repository"`
+	Tool_Shed_Repository ToolShedRepository `json:"tool_shed_repository"`
 	Version              string             `json:"version"`
 	Traceboack           string             `json:"traceback"` // Set only if the server returns an error
 	Err_Msg              string             `json:"err_msg"`   // Err_Msg =="" if no error
@@ -205,7 +205,7 @@ type toolInfo struct {
 }
 
 // Informations about a toolshed
-type toolShedRepository struct {
+type ToolShedRepository struct {
 	Changeset_Revision string `json:"changeset_revision"`
 	Name               string `json:"name"`
 	Owner              string `json:"owner"`
@@ -642,10 +642,10 @@ func (g *Galaxy) newClient() *http.Client {
 // Otherwise, it queries the galaxy entry point
 //	api/tools?q=<name>
 func (g *Galaxy) SearchToolID(name string) (toolIds []string, err error) {
-	var info toolInfo
+	var info ToolInfo
 	// We first try to see if the tool with an ID
 	// Corresponding to the given name exists
-	info, err = g.getToolById(name)
+	info, err = g.GetToolById(name)
 	if err == nil && info.Err_Code == "" && info.Id == name {
 		toolIds = []string{info.Id}
 	} else {
@@ -655,7 +655,7 @@ func (g *Galaxy) SearchToolID(name string) (toolIds []string, err error) {
 	return
 }
 
-func (g *Galaxy) getToolById(id string) (tool toolInfo, err error) {
+func (g *Galaxy) GetToolById(id string) (tool ToolInfo, err error) {
 	var url string = g.url + TOOLS + "/" + id
 	err = g.galaxyGetRequestJSON(url, &tool)
 	return
