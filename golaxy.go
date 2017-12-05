@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Version of galaxy, returned by /api/version
@@ -629,7 +630,7 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 func (g *Galaxy) newClient() *http.Client {
 	config := &tls.Config{InsecureSkipVerify: g.trustcertificate} // this line here
 	tr := &http.Transport{TLSClientConfig: config}
-	return &http.Client{Transport: tr}
+	return &http.Client{Transport: tr, Timeout: time.Second * 30}
 }
 
 // This function returns ID of the tools corresponding to
