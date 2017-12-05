@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -628,9 +629,13 @@ func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]st
 }
 
 func (g *Galaxy) newClient() *http.Client {
-	config := &tls.Config{InsecureSkipVerify: g.trustcertificate} // this line here
-	tr := &http.Transport{TLSClientConfig: config}
-	return &http.Client{Transport: tr, Timeout: time.Second * 30}
+	config := &tls.Config{InsecureSkipVerify: g.trustcertificate}
+	tr := &http.Transport{
+		TLSClientConfig:     config,
+		Dial:                (&net.Dialer{Timeout: 20 * time.Second}).Dial,
+		TLSHandshakeTimeout: 20 * time.Second,
+	}
+	return &http.Client{Transport: tr, Timeout: time.Second * 40}
 }
 
 // This function returns ID of the tools corresponding to
