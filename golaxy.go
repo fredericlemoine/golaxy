@@ -314,6 +314,7 @@ type Galaxy struct {
 	url              string // url of the galaxy instance: http(s)://ip:port/
 	apikey           string // api key
 	trustcertificate bool   // if we should trust galaxy certificate
+	requestattempts  int    // Number of times requests (get post or delete) must be tried if an error occurs (timeout for example). Default 1
 }
 
 const (
@@ -332,9 +333,26 @@ func NewGalaxy(url, key string, trustcertificate bool) *Galaxy {
 		url,
 		key,
 		trustcertificate,
+		1,
 	}
 }
 
+// Sets the number of times golaxy will try to execute a request on
+// the galaxy server if an error occurs (like a timeout).
+//
+// Default: 1
+//
+// It only applies on get, post and delete http request errors (timeout,
+// etc.), and not Galaxy server errors.
+//
+// If given attempts is <=0, will not change anything.
+func (g *Galaxy) SetNbRequestAttempts(attempts int) {
+	if attempts > 0 {
+		g.requestattempts = attempts
+	}
+}
+
+// Returns the Version of the Galaxy Server
 func (g *Galaxy) Version() (version string, err error) {
 	var url string = g.url + VERSION
 	var answer galaxyVersion
@@ -1015,17 +1033,26 @@ func (ws *WorkflowStatus) ListStepRanks() (stepRanks []int) {
 func (g *Galaxy) galaxyGetRequestBytes(url string) (answer []byte, err error) {
 	var req *http.Request
 	var response *http.Response
+	var client *http.Client
 
 	if req, err = http.NewRequest("GET", url, nil); err != nil {
 		err = g.hideKeyFromError(err)
 		return
 	}
 
-	if response, err = g.newClient().Do(req); err != nil {
-		err = g.hideKeyFromError(err)
+	client = g.newClient()
+	for i := 0; i < g.requestattempts; i++ {
+		if response, err = client.Do(req); err != nil {
+			err = g.hideKeyFromError(err)
+			return
+		} else {
+			defer response.Body.Close()
+			break
+		}
+	}
+	if err != nil {
 		return
 	}
-	defer response.Body.Close()
 
 	answer, err = ioutil.ReadAll(response.Body)
 	return
@@ -1038,17 +1065,26 @@ func (g *Galaxy) galaxyGetRequestJSON(url string, answer interface{}) (err error
 	var req *http.Request
 	var response *http.Response
 	var body []byte
+	var client *http.Client
 
 	if req, err = http.NewRequest("GET", url, nil); err != nil {
 		err = g.hideKeyFromError(err)
 		return
 	}
 
-	if response, err = g.newClient().Do(req); err != nil {
-		err = g.hideKeyFromError(err)
+	client = g.newClient()
+	for i := 0; i < g.requestattempts; i++ {
+		if response, err = client.Do(req); err != nil {
+			err = g.hideKeyFromError(err)
+			return
+		} else {
+			defer response.Body.Close()
+			break
+		}
+	}
+	if err != nil {
 		return
 	}
-	defer response.Body.Close()
 
 	if body, err = ioutil.ReadAll(response.Body); err != nil {
 		return
@@ -1064,17 +1100,26 @@ func (g *Galaxy) galaxyPostRequestJSON(url string, data []byte, answer interface
 	var req *http.Request
 	var resp *http.Response
 	var body []byte
+	var client *http.Client
 
 	if req, err = http.NewRequest("POST", url, bytes.NewBuffer(data)); err != nil {
 		err = g.hideKeyFromError(err)
 		return
 	}
 
-	if resp, err = g.newClient().Do(req); err != nil {
-		err = g.hideKeyFromError(err)
+	client = g.newClient()
+	for i := 0; i < g.requestattempts; i++ {
+		if resp, err = client.Do(req); err != nil {
+			err = g.hideKeyFromError(err)
+			return
+		} else {
+			defer resp.Body.Close()
+			break
+		}
+	}
+	if err != nil {
 		return
 	}
-	defer resp.Body.Close()
 
 	if body, err = ioutil.ReadAll(resp.Body); err != nil {
 		return
@@ -1090,14 +1135,23 @@ func (g *Galaxy) galaxyDeleteRequestJSON(url string, data []byte, answer interfa
 	var req *http.Request
 	var response *http.Response
 	var body []byte
+	var client *http.Client
 
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
 
-	if response, err = g.newClient().Do(req); err != nil {
-		err = g.hideKeyFromError(err)
+	client = g.newClient()
+	for i := 0; i < g.requestattempts; i++ {
+		if response, err = client.Do(req); err != nil {
+			err = g.hideKeyFromError(err)
+			//return
+		} else {
+			defer response.Body.Close()
+			break
+		}
+	}
+	if err != nil {
 		return
 	}
-	defer response.Body.Close()
 
 	if body, err = ioutil.ReadAll(response.Body); err != nil {
 		return
@@ -1112,14 +1166,24 @@ func (g *Galaxy) galaxyDeleteRequestJSON(url string, data []byte, answer interfa
 func (g *Galaxy) galaxyDeleteRequestBytes(url string, data []byte) (answer []byte, err error) {
 	var req *http.Request
 	var response *http.Response
+	var client *http.Client
 
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
 
-	if response, err = g.newClient().Do(req); err != nil {
-		err = g.hideKeyFromError(err)
+	client = g.newClient()
+	// We do requestattempts attempts
+	for i := 0; i < g.requestattempts; i++ {
+		if response, err = client.Do(req); err != nil {
+			err = g.hideKeyFromError(err)
+			//return
+		} else {
+			defer response.Body.Close()
+			break
+		}
+	}
+	if err != nil {
 		return
 	}
-	defer response.Body.Close()
 
 	if answer, err = ioutil.ReadAll(response.Body); err != nil {
 		return
