@@ -650,10 +650,10 @@ func (g *Galaxy) newClient() *http.Client {
 	config := &tls.Config{InsecureSkipVerify: g.trustcertificate}
 	tr := &http.Transport{
 		TLSClientConfig:     config,
-		Dial:                (&net.Dialer{Timeout: 20 * time.Second}).Dial,
-		TLSHandshakeTimeout: 20 * time.Second,
+		Dial:                (&net.Dialer{Timeout: 40 * time.Second}).Dial,
+		TLSHandshakeTimeout: 40 * time.Second,
 	}
-	return &http.Client{Transport: tr, Timeout: time.Second * 40}
+	return &http.Client{Transport: tr, Timeout: 60 * time.Second}
 }
 
 // This function returns ID of the tools corresponding to
@@ -1040,11 +1040,11 @@ func (g *Galaxy) galaxyGetRequestBytes(url string) (answer []byte, err error) {
 		return
 	}
 
-	client = g.newClient()
 	for i := 0; i < g.requestattempts; i++ {
+		client = g.newClient()
 		if response, err = client.Do(req); err != nil {
 			err = g.hideKeyFromError(err)
-			return
+			//return
 		} else {
 			defer response.Body.Close()
 			break
@@ -1072,11 +1072,11 @@ func (g *Galaxy) galaxyGetRequestJSON(url string, answer interface{}) (err error
 		return
 	}
 
-	client = g.newClient()
 	for i := 0; i < g.requestattempts; i++ {
+		client = g.newClient()
 		if response, err = client.Do(req); err != nil {
 			err = g.hideKeyFromError(err)
-			return
+			//return
 		} else {
 			defer response.Body.Close()
 			break
@@ -1107,11 +1107,11 @@ func (g *Galaxy) galaxyPostRequestJSON(url string, data []byte, answer interface
 		return
 	}
 
-	client = g.newClient()
 	for i := 0; i < g.requestattempts; i++ {
+		client = g.newClient()
 		if resp, err = client.Do(req); err != nil {
 			err = g.hideKeyFromError(err)
-			return
+			//return
 		} else {
 			defer resp.Body.Close()
 			break
@@ -1139,8 +1139,8 @@ func (g *Galaxy) galaxyDeleteRequestJSON(url string, data []byte, answer interfa
 
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
 
-	client = g.newClient()
 	for i := 0; i < g.requestattempts; i++ {
+		client = g.newClient()
 		if response, err = client.Do(req); err != nil {
 			err = g.hideKeyFromError(err)
 			//return
@@ -1170,9 +1170,9 @@ func (g *Galaxy) galaxyDeleteRequestBytes(url string, data []byte) (answer []byt
 
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
 
-	client = g.newClient()
 	// We do requestattempts attempts
 	for i := 0; i < g.requestattempts; i++ {
+		client = g.newClient()
 		if response, err = client.Do(req); err != nil {
 			err = g.hideKeyFromError(err)
 			//return
