@@ -1044,17 +1044,19 @@ func (g *Galaxy) galaxyGetRequestBytes(url string) (answer []byte, err error) {
 		client = g.newClient()
 		if response, err = client.Do(req); err != nil {
 			err = g.hideKeyFromError(err)
-			//return
-		} else {
-			defer response.Body.Close()
+			continue
+		}
+		defer response.Body.Close()
+
+		if answer, err = ioutil.ReadAll(response.Body); err != nil {
+			continue
+		}
+
+		if err == nil {
 			break
 		}
 	}
-	if err != nil {
-		return
-	}
 
-	answer, err = ioutil.ReadAll(response.Body)
 	return
 }
 
@@ -1076,21 +1078,22 @@ func (g *Galaxy) galaxyGetRequestJSON(url string, answer interface{}) (err error
 		client = g.newClient()
 		if response, err = client.Do(req); err != nil {
 			err = g.hideKeyFromError(err)
-			//return
-		} else {
-			defer response.Body.Close()
+			continue
+		}
+		defer response.Body.Close()
+
+		if body, err = ioutil.ReadAll(response.Body); err != nil {
+			continue
+		}
+
+		if err = json.Unmarshal(body, answer); err != nil {
+			continue
+		}
+
+		if err == nil {
 			break
 		}
 	}
-	if err != nil {
-		return
-	}
-
-	if body, err = ioutil.ReadAll(response.Body); err != nil {
-		return
-	}
-
-	err = json.Unmarshal(body, answer)
 	return
 }
 
@@ -1111,21 +1114,22 @@ func (g *Galaxy) galaxyPostRequestJSON(url string, data []byte, answer interface
 		client = g.newClient()
 		if resp, err = client.Do(req); err != nil {
 			err = g.hideKeyFromError(err)
-			//return
-		} else {
-			defer resp.Body.Close()
+			continue
+		}
+		defer resp.Body.Close()
+
+		if body, err = ioutil.ReadAll(resp.Body); err != nil {
+			continue
+		}
+
+		if err = json.Unmarshal(body, answer); err != nil {
+			continue
+		}
+
+		if err == nil {
 			break
 		}
 	}
-	if err != nil {
-		return
-	}
-
-	if body, err = ioutil.ReadAll(resp.Body); err != nil {
-		return
-	}
-
-	err = json.Unmarshal(body, answer)
 	return
 }
 
