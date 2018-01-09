@@ -1087,6 +1087,7 @@ func (g *Galaxy) galaxyGetRequestJSON(url string, answer interface{}) (err error
 		}
 
 		if err = json.Unmarshal(body, answer); err != nil {
+			err = errors.New(fmt.Sprintf("%s (%s)", err.Error(), string(body)))
 			continue
 		}
 
