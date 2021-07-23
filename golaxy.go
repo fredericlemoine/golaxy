@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -484,7 +483,6 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	r, w = io.Pipe()
 	writer = multipart.NewWriter(w)
 
-	log.Println(filepath.Base(path))
 	go func() {
 
 		done = make(chan error)
@@ -500,7 +498,6 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 		postrequest.ContentLength += int64(602)                      // Constant part of the content-length
 		postrequest.Header.Set("Content-Type", writer.FormDataContentType())
 		postrequest.Header.Set("Transfer-Encoding", "chunked")
-		log.Println(postrequest.Header)
 		if postresponse, err2 = g.newClient().Do(postrequest); err2 != nil {
 			err2 = errors.New("Error while POSTing form: " + err2.Error())
 			done <- err2
