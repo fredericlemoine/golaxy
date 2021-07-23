@@ -440,7 +440,6 @@ func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid, jobid string, err error) {
 	var url string = g.url + TOOLS + "?key=" + g.apikey
 	var file *os.File
-	var body *bytes.Buffer
 	var body2 []byte
 	var writer *multipart.Writer
 	var part io.Writer
@@ -449,6 +448,8 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	var postrequest *http.Request
 	var postresponse *http.Response
 	var answer toolResponse
+	var r *io.PipeReader
+	var w *io.PipeWriter
 
 	if historyid == "" {
 		err = errors.New("UploadFile input history id is not valid")
@@ -460,52 +461,52 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	}
 	defer file.Close()
 
-	body = &bytes.Buffer{}
-	writer = multipart.NewWriter(body)
+	r, w = io.Pipe()
+	writer = multipart.NewWriter(w)
 
-	if part, err = writer.CreateFormFile("files_0|file_data", filepath.Base(path)); err != nil {
-		err = errors.New("Error while creating upload file form: " + err.Error())
-		return
-	}
+	go func() {
+		defer w.Close()
+		defer writer.Close()
 
-	if _, err = io.Copy(part, file); err != nil {
-		err = errors.New("Error while copying file content to form: " + err.Error())
-		return
-	}
+		if part, err = writer.CreateFormFile("files_0|file_data", filepath.Base(path)); err != nil {
+			err = errors.New("Error while creating upload file form: " + err.Error())
+			return
+		}
 
-	if err = writer.WriteField("history_id", historyid); err != nil {
-		err = errors.New("Error while writing history id to form: " + err.Error())
-		return
-	}
-	if err = writer.WriteField("tool_id", "upload1"); err != nil {
-		err = errors.New("Error while writing tool id to form: " + err.Error())
-		return
-	}
+		if _, err = io.Copy(part, file); err != nil {
+			err = errors.New("Error while copying file content to form: " + err.Error())
+			return
+		}
 
-	fileinput = &fileUpload{
-		ftype,
-		"?",
-		false,
-		false,
-		filepath.Base(path),
-		"upload_dataset",
-	}
-	if input, err = json.Marshal(fileinput); err != nil {
-		err = errors.New("Error while marshaling fileinput: " + err.Error())
-		return
-	}
+		if err = writer.WriteField("history_id", historyid); err != nil {
+			err = errors.New("Error while writing history id to form: " + err.Error())
+			return
+		}
+		if err = writer.WriteField("tool_id", "upload1"); err != nil {
+			err = errors.New("Error while writing tool id to form: " + err.Error())
+			return
+		}
 
-	if err = writer.WriteField("inputs", string(input)); err != nil {
-		err = errors.New("Error while writing file inputs to form: " + err.Error())
-		return
-	}
+		fileinput = &fileUpload{
+			ftype,
+			"?",
+			false,
+			false,
+			filepath.Base(path),
+			"upload_dataset",
+		}
+		if input, err = json.Marshal(fileinput); err != nil {
+			err = errors.New("Error while marshaling fileinput: " + err.Error())
+			return
+		}
 
-	if err = writer.Close(); err != nil {
-		err = errors.New("Error while closing form writer: " + err.Error())
-		return
-	}
+		if err = writer.WriteField("inputs", string(input)); err != nil {
+			err = errors.New("Error while writing file inputs to form: " + err.Error())
+			return
+		}
+	}()
 
-	if postrequest, err = http.NewRequest("POST", url, body); err != nil {
+	if postrequest, err = http.NewRequest("POST", url, r); err != nil {
 		err = errors.New("Error while creating new POST request: " + err.Error())
 		return
 	}
