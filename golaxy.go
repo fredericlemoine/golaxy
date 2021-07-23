@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -450,6 +451,10 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	var answer toolResponse
 	var r *io.PipeReader
 	var w *io.PipeWriter
+	var err2 error
+	var stat os.FileInfo
+	var fsize int64
+	var done chan error
 
 	if historyid == "" {
 		err = errors.New("UploadFile input history id is not valid")
@@ -459,69 +464,93 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	if file, err = os.Open(path); err != nil {
 		return
 	}
-	defer file.Close()
+	if stat, err = file.Stat(); err != nil {
+		return
+	}
+	fsize = stat.Size()
 
+	fileinput = &fileUpload{
+		ftype,
+		"?",
+		false,
+		false,
+		filepath.Base(path),
+		"upload_dataset",
+	}
+	if input, err = json.Marshal(fileinput); err != nil {
+		err = errors.New("Error while marshaling fileinput: " + err.Error())
+		return
+	}
 	r, w = io.Pipe()
 	writer = multipart.NewWriter(w)
 
+	log.Println(filepath.Base(path))
 	go func() {
-		defer w.Close()
-		defer writer.Close()
 
-		if part, err = writer.CreateFormFile("files_0|file_data", filepath.Base(path)); err != nil {
-			err = errors.New("Error while creating upload file form: " + err.Error())
+		done = make(chan error)
+		if postrequest, err2 = http.NewRequest("POST", url, r); err2 != nil {
+			err2 = errors.New("Error while creating new POST request: " + err2.Error())
+			done <- err2
 			return
 		}
-
-		if _, err = io.Copy(part, file); err != nil {
-			err = errors.New("Error while copying file content to form: " + err.Error())
+		postrequest.ContentLength = fsize                            // filesize
+		postrequest.ContentLength += int64(len(filepath.Base(path))) // Variable part of the content-length
+		postrequest.ContentLength += int64(len(string(input)))       // Variable part of the content-length
+		postrequest.ContentLength += int64(len(string(historyid)))   // Variable part of the content-length
+		postrequest.ContentLength += int64(602)                      // Constant part of the content-length
+		postrequest.Header.Set("Content-Type", writer.FormDataContentType())
+		postrequest.Header.Set("Transfer-Encoding", "chunked")
+		log.Println(postrequest.Header)
+		if postresponse, err2 = g.newClient().Do(postrequest); err2 != nil {
+			err2 = errors.New("Error while POSTing form: " + err2.Error())
+			done <- err2
 			return
 		}
-
-		if err = writer.WriteField("history_id", historyid); err != nil {
-			err = errors.New("Error while writing history id to form: " + err.Error())
-			return
-		}
-		if err = writer.WriteField("tool_id", "upload1"); err != nil {
-			err = errors.New("Error while writing tool id to form: " + err.Error())
-			return
-		}
-
-		fileinput = &fileUpload{
-			ftype,
-			"?",
-			false,
-			false,
-			filepath.Base(path),
-			"upload_dataset",
-		}
-		if input, err = json.Marshal(fileinput); err != nil {
-			err = errors.New("Error while marshaling fileinput: " + err.Error())
-			return
-		}
-
-		if err = writer.WriteField("inputs", string(input)); err != nil {
-			err = errors.New("Error while writing file inputs to form: " + err.Error())
-			return
-		}
+		done <- nil
 	}()
 
-	if postrequest, err = http.NewRequest("POST", url, r); err != nil {
-		err = errors.New("Error while creating new POST request: " + err.Error())
+	if part, err = writer.CreateFormFile("files_0|file_data", filepath.Base(path)); err != nil {
+		err = errors.New("Error while creating upload file form: " + err.Error())
 		return
 	}
-	postrequest.Header.Set("Content-Type", writer.FormDataContentType())
+	if _, err = io.Copy(part, file); err != nil {
+		err = errors.New("Error while copying file content to form: " + err.Error())
+		return
+	}
+	if err = file.Close(); err != nil {
+		return
+	}
 
-	if postresponse, err = g.newClient().Do(postrequest); err != nil {
-		err = errors.New("Error while POSTing form: " + err.Error())
+	if err = writer.WriteField("history_id", historyid); err != nil {
+		err = errors.New("Error while writing history id to form: " + err.Error())
 		return
 	}
-	defer postresponse.Body.Close()
+
+	if err = writer.WriteField("tool_id", "upload1"); err != nil {
+		err = errors.New("Error while writing tool id to form: " + err.Error())
+		return
+	}
+
+	if err = writer.WriteField("inputs", string(input)); err != nil {
+		err = errors.New("Error while writing file inputs to form: " + err.Error())
+		return
+	}
+	if err = writer.Close(); err != nil {
+		return
+	}
+	if err = w.Close(); err != nil {
+		return
+	}
+
+	if err = <-done; err != nil {
+		return
+	}
 
 	if body2, err = ioutil.ReadAll(postresponse.Body); err != nil {
 		err = errors.New("Error while reading server respone: " + err.Error())
 		return
 	}
+	postresponse.Body.Close()
 
 	if err = json.Unmarshal(body2, &answer); err != nil {
 		err = errors.New("Error while unmarsheling server respone: " + err.Error())
