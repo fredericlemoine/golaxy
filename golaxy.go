@@ -373,7 +373,7 @@ func (g *Galaxy) Version() (version string, err error) {
 // Creates an history with given name on the Galaxy instance
 // and returns its id
 func (g *Galaxy) CreateHistory(name string) (history HistoryFullInfo, err error) {
-	var url string = g.url + HISTORY + "?key=" + g.apikey
+	var url string = g.url + HISTORY
 
 	if err = g.galaxyPostRequestJSON(url, []byte("{\"name\":\""+name+"\"}"), &history); err != nil {
 		return
@@ -387,7 +387,7 @@ func (g *Galaxy) CreateHistory(name string) (history HistoryFullInfo, err error)
 }
 
 func (g *Galaxy) ListHistories() (histories []HistoryShortInfo, err error) {
-	var url string = g.url + HISTORY + "?key=" + g.apikey
+	var url string = g.url + HISTORY
 	var body []byte
 	var galaxyErr genericError
 
@@ -417,7 +417,7 @@ func (g *Galaxy) ListHistories() (histories []HistoryShortInfo, err error) {
 // 	- The state of the deletion ("ok")
 // 	- A potential error
 func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
-	var url string = g.url + HISTORY + "/" + historyid + "?key=" + g.apikey
+	var url string = g.url + HISTORY + "/" + historyid
 	var answer HistoryFullInfo
 
 	if err = g.galaxyDeleteRequestJSON(url, []byte("{\"purge\":\"true\"}"), &answer); err != nil {
@@ -438,7 +438,7 @@ func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 //
 // Returns the file id, the job id and a potential error
 func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid, jobid string, err error) {
-	var url string = g.url + TOOLS + "?key=" + g.apikey
+	var url string = g.url + TOOLS
 	var file *os.File
 	var body2 []byte
 	var writer *multipart.Writer
@@ -484,7 +484,6 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	writer = multipart.NewWriter(w)
 
 	go func() {
-
 		done = make(chan error)
 		if postrequest, err2 = http.NewRequest("POST", url, r); err2 != nil {
 			err2 = errors.New("Error while creating new POST request: " + err2.Error())
@@ -498,6 +497,7 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 		postrequest.ContentLength += int64(602)                      // Constant part of the content-length
 		postrequest.Header.Set("Content-Type", writer.FormDataContentType())
 		postrequest.Header.Set("Transfer-Encoding", "chunked")
+		postrequest.Header.Set("x-api-key", g.apikey)
 		if postresponse, err2 = g.newClient().Do(postrequest); err2 != nil {
 			err2 = errors.New("Error while POSTing form: " + err2.Error())
 			done <- err2
@@ -578,7 +578,7 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 // 	- The content of the file in []byte
 // 	- A potential error
 func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err error) {
-	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display" + "?key=" + g.apikey
+	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display"
 	content, err = g.galaxyGetRequestBytes(url)
 	return
 }
@@ -619,7 +619,7 @@ func (tl *ToolLaunch) AddParameter(paramname, paramvalue string) {
 // 	- Tool outputs : map[out file name]=out file id
 // 	- Jobs: array of job ids
 func (g *Galaxy) LaunchTool(tl *ToolLaunch) (outfiles map[string]string, jobids []string, err error) {
-	var url string = g.url + TOOLS + "?key=" + g.apikey
+	var url string = g.url + TOOLS
 	var input []byte
 	var answer toolResponse
 
@@ -653,7 +653,7 @@ func (g *Galaxy) LaunchTool(tl *ToolLaunch) (outfiles map[string]string, jobids 
 // 	- job State
 // 	- Output files: map : key: out filename value: out file id
 func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]string, err error) {
-	var url string = g.url + CHECK_JOB + "/" + jobid + "?key=" + g.apikey
+	var url string = g.url + CHECK_JOB + "/" + jobid
 	var answer job
 
 	if err = g.galaxyGetRequestJSON(url, &answer); err != nil {
@@ -737,7 +737,7 @@ func (g *Galaxy) SearchWorkflowIDs(name string, published bool) (ids []string, e
 //
 // If published: then search the workflow in the published+imported workflows
 func (g *Galaxy) GetWorkflowByID(inputid string, published bool) (wf WorkflowInfo, err error) {
-	var url string = g.url + WORKFLOWS + "/" + inputid + "?key=" + g.apikey
+	var url string = g.url + WORKFLOWS + "/" + inputid
 	if published {
 		url += "&show_published=true"
 	}
@@ -781,7 +781,7 @@ func (g *Galaxy) SearchWorkflowIDsByName(name string, published bool) (ids []str
 //
 // If published: then lists published+imported workflows
 func (g *Galaxy) ListWorkflows(published bool) (workflows []WorkflowInfo, err error) {
-	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
+	var url string = g.url + WORKFLOWS
 	var body []byte
 	var galaxyErr genericError
 
@@ -811,7 +811,7 @@ func (g *Galaxy) ListWorkflows(published bool) (workflows []WorkflowInfo, err er
 
 // Lists all the workflows imported in the user's account
 func (g *Galaxy) ImportSharedWorkflow(sharedworkflowid string) (workflow WorkflowInfo, err error) {
-	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
+	var url string = g.url + WORKFLOWS
 
 	err = g.galaxyPostRequestJSON(url, []byte("{\"shared_workflow_id\":\""+sharedworkflowid+"\"}"), &workflow)
 
@@ -826,7 +826,7 @@ func (g *Galaxy) ImportSharedWorkflow(sharedworkflowid string) (workflow Workflo
 // 	- The state of the deletion ("Workflow '<name>' successfully deleted" for example)
 // 	- A potential error if the workflow cannot be deleted (server response does not contain "successfully deleted")
 func (g *Galaxy) DeleteWorkflow(workflowid string) (state string, err error) {
-	var url string = g.url + WORKFLOWS + "/" + workflowid + "?key=" + g.apikey
+	var url string = g.url + WORKFLOWS + "/" + workflowid
 	var answer []byte
 
 	if answer, err = g.galaxyDeleteRequestBytes(url, []byte{}); err != nil {
@@ -879,7 +879,7 @@ func (wl *WorkflowLaunch) AddParameter(stepIndex int, paramName string, paramVal
 //
 // Inparams are defined as key: step id of the workflow, value: map of key:param name/value: param value
 func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocation, err error) {
-	var url string = g.url + WORKFLOWS + "?key=" + g.apikey
+	var url string = g.url + WORKFLOWS
 	var input []byte
 
 	answer = &WorkflowInvocation{}
@@ -972,7 +972,7 @@ func (g *Galaxy) CheckWorkflow(wfi *WorkflowInvocation) (wfstatus *WorkflowStatu
 //
 // TODO: handle json response from the server in case of success... nothing described.
 func (g *Galaxy) DeleteWorkflowRun(wfi *WorkflowInvocation) (err error) {
-	var url string = g.url + WORKFLOWS + "/" + wfi.Workflow_Id + "/invocations/" + wfi.Id + "?key=" + g.apikey
+	var url string = g.url + WORKFLOWS + "/" + wfi.Workflow_Id + "/invocations/" + wfi.Id
 	var answer []byte
 	var galaxyErr genericError
 
@@ -1066,6 +1066,7 @@ func (g *Galaxy) galaxyGetRequestBytes(url string) (answer []byte, err error) {
 		err = g.hideKeyFromError(err)
 		return
 	}
+	req.Header.Set("x-api-key", g.apikey)
 
 	for i := 0; i < g.requestattempts; i++ {
 		client = g.newClient()
@@ -1100,6 +1101,7 @@ func (g *Galaxy) galaxyGetRequestJSON(url string, answer interface{}) (err error
 		err = g.hideKeyFromError(err)
 		return
 	}
+	req.Header.Set("x-api-key", g.apikey)
 
 	for i := 0; i < g.requestattempts; i++ {
 		client = g.newClient()
@@ -1137,6 +1139,7 @@ func (g *Galaxy) galaxyPostRequestJSON(url string, data []byte, answer interface
 		err = g.hideKeyFromError(err)
 		return
 	}
+	req.Header.Set("x-api-key", g.apikey)
 
 	for i := 0; i < g.requestattempts; i++ {
 		client = g.newClient()
@@ -1170,6 +1173,7 @@ func (g *Galaxy) galaxyDeleteRequestJSON(url string, data []byte, answer interfa
 	var client *http.Client
 
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
+	req.Header.Set("x-api-key", g.apikey)
 
 	for i := 0; i < g.requestattempts; i++ {
 		client = g.newClient()
@@ -1201,6 +1205,7 @@ func (g *Galaxy) galaxyDeleteRequestBytes(url string, data []byte) (answer []byt
 	var client *http.Client
 
 	req, _ = http.NewRequest("DELETE", url, bytes.NewBuffer(data))
+	req.Header.Set("x-api-key", g.apikey)
 
 	// We do requestattempts attempts
 	for i := 0; i < g.requestattempts; i++ {
