@@ -130,7 +130,7 @@ type toolOutput struct {
 	Create_time          string   `json:"create_time"`
 	Hid                  int      `json:"hid"`
 	File_size            int      `json:"file_size"`
-	Metadata_data_lines  string   `json:"metadata_data_lines"`
+	Metadata_data_lines  int      `json:"metadata_data_lines"`
 	File_ext             string   `json:"file_ext"`
 	Id                   string   `json:"id"`
 	Misc_info            string   `json:"misc_info"`
@@ -301,9 +301,9 @@ type genericError struct {
 }
 
 // Information about status of a workflow run
-//	- General status
-//	- Status of each step
-//	- Output file ids of each steps
+//   - General status
+//   - Status of each step
+//   - Output file ids of each steps
 type WorkflowStatus struct {
 	wfStatus   string                    // Workflow global status
 	stepStatus map[int]string            // All step status per steprank
@@ -326,8 +326,8 @@ const (
 )
 
 // Initializes a new Galaxy with given:
-// 	- url of the form http(s)://ip:port
-// 	- and an api key
+//   - url of the form http(s)://ip:port
+//   - and an api key
 func NewGalaxy(url, key string, trustcertificate bool) *Galaxy {
 	return &Galaxy{
 		url,
@@ -414,8 +414,8 @@ func (g *Galaxy) ListHistories() (histories []HistoryShortInfo, err error) {
 
 // Deletes and purges an history defined by its id
 // Returns:
-// 	- The state of the deletion ("ok")
-// 	- A potential error
+//   - The state of the deletion ("ok")
+//   - A potential error
 func (g *Galaxy) DeleteHistory(historyid string) (state string, err error) {
 	var url string = g.url + HISTORY + "/" + historyid
 	var answer HistoryFullInfo
@@ -550,7 +550,7 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 	postresponse.Body.Close()
 
 	if err = json.Unmarshal(body2, &answer); err != nil {
-		err = errors.New("Error while unmarsheling server respone: " + err.Error())
+		err = errors.New("Error while unmarshaling server respone: " + err.Error())
 		return
 	}
 	if answer.Err_msg != "" {
@@ -575,8 +575,8 @@ func (g *Galaxy) UploadFile(historyid string, path string, ftype string) (fileid
 
 // Downloads a file defined by its id from the given history of the galaxy instance
 // Returns:
-// 	- The content of the file in []byte
-// 	- A potential error
+//   - The content of the file in []byte
+//   - A potential error
 func (g *Galaxy) DownloadFile(historyid, fileid string) (content []byte, err error) {
 	var url string = g.url + "/api/histories/" + historyid + "/contents/" + fileid + "/display"
 	content, err = g.galaxyGetRequestBytes(url)
@@ -596,28 +596,28 @@ func (g *Galaxy) NewToolLauncher(historyid string, toolid string) (tl *ToolLaunc
 
 // Add new input file to the Tool Launcher
 //
-//	- inputIndex : index of this input in the workflow (see WorkflowInfo / GetWorkflowById)
-//	- fielId: id of input file
-//	- fielScr : one of  ["ldda", "ld", "hda", "hdca"]
+//   - inputIndex : index of this input in the workflow (see WorkflowInfo / GetWorkflowById)
+//   - fielId: id of input file
+//   - fielScr : one of  ["ldda", "ld", "hda", "hdca"]
 func (tl *ToolLaunch) AddFileInput(paramname string, fileid string, filescr string) {
 	tl.Inputs[paramname] = toolInput{filescr, fileid, ""}
 }
 
 // Add new parameter to Tool launcher
-//	- paramname: name of the tool parameter
-//	- paramvalue: value of the given parameter
+//   - paramname: name of the tool parameter
+//   - paramvalue: value of the given parameter
 func (tl *ToolLaunch) AddParameter(paramname, paramvalue string) {
 	tl.Inputs[paramname] = paramvalue
 }
 
 // Launches a job at the given galaxy instance, with:
-// 	- The tool given by its id (name)
-// 	- Using the given history
-// 	- Giving as input the files in the map : key: tool input name, value: dataset id
+//   - The tool given by its id (name)
+//   - Using the given history
+//   - Giving as input the files in the map : key: tool input name, value: dataset id
 //
 // Returns:
-// 	- Tool outputs : map[out file name]=out file id
-// 	- Jobs: array of job ids
+//   - Tool outputs : map[out file name]=out file id
+//   - Jobs: array of job ids
 func (g *Galaxy) LaunchTool(tl *ToolLaunch) (outfiles map[string]string, jobids []string, err error) {
 	var url string = g.url + TOOLS
 	var input []byte
@@ -650,8 +650,8 @@ func (g *Galaxy) LaunchTool(tl *ToolLaunch) (outfiles map[string]string, jobids 
 
 // Queries the galaxy instance to check the job defined by its Id
 // Returns:
-// 	- job State
-// 	- Output files: map : key: out filename value: out file id
+//   - job State
+//   - Output files: map : key: out filename value: out file id
 func (g *Galaxy) CheckJob(jobid string) (jobstate string, outfiles map[string]string, err error) {
 	var url string = g.url + CHECK_JOB + "/" + jobid
 	var answer job
@@ -687,10 +687,13 @@ func (g *Galaxy) newClient() *http.Client {
 // the name/ID in argument.
 //
 // It first queryies the
+//
 //	api/tools/<name>
+//
 // entry point. If The returned tool has its ID == given name
 // then returns it.
 // Otherwise, it queries the galaxy entry point
+//
 //	api/tools?q=<name>
 func (g *Galaxy) SearchToolID(name string) (toolIds []string, err error) {
 	var info ToolInfo
@@ -823,8 +826,8 @@ func (g *Galaxy) ImportSharedWorkflow(sharedworkflowid string) (workflow Workflo
 }
 
 // Deletes a Workflow defined by its id
-// 	- The state of the deletion ("Workflow '<name>' successfully deleted" for example)
-// 	- A potential error if the workflow cannot be deleted (server response does not contain "successfully deleted")
+//   - The state of the deletion ("Workflow '<name>' successfully deleted" for example)
+//   - A potential error if the workflow cannot be deleted (server response does not contain "successfully deleted")
 func (g *Galaxy) DeleteWorkflow(workflowid string) (state string, err error) {
 	var url string = g.url + WORKFLOWS + "/" + workflowid
 	var answer []byte
@@ -855,17 +858,17 @@ func (g *Galaxy) NewWorkflowLauncher(historyid string, workflowid string) (launc
 
 // Add new input file to the workflow
 //
-//	- inputIndex : index of this input in the workflow (see WorkflowInfo / GetWorkflowById)
-//	- fielId: id of input file
-//	- fielScr : one of  ["ldda", "ld", "hda", "hdca"]
+//   - inputIndex : index of this input in the workflow (see WorkflowInfo / GetWorkflowById)
+//   - fielId: id of input file
+//   - fielScr : one of  ["ldda", "ld", "hda", "hdca"]
 func (wl *WorkflowLaunch) AddFileInput(inputIndex string, fileId string, fileSrc string) {
 	wl.Inputs[inputIndex] = toolInput{fileSrc, fileId, ""}
 }
 
 // Add new parameter to workflow launcher
 //
-//	- fielId: id of input file
-//	- fielScr : one of  ["ldda", "ld", "hda", "hdca"]
+//   - fielId: id of input file
+//   - fielScr : one of  ["ldda", "ld", "hda", "hdca"]
 func (wl *WorkflowLaunch) AddParameter(stepIndex int, paramName string, paramValue string) {
 	if _, ok := wl.Parameters[stepIndex]; !ok {
 		wl.Parameters[stepIndex] = make(map[string]string)
@@ -875,7 +878,7 @@ func (wl *WorkflowLaunch) AddParameter(stepIndex int, paramName string, paramVal
 
 // Launches the given workflow (defined by its ID), with given inputs and params.
 //
-// Infiles are defined by their indexes on the workflow
+// # Infiles are defined by their indexes on the workflow
 //
 // Inparams are defined as key: step id of the workflow, value: map of key:param name/value: param value
 func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocation, err error) {
@@ -902,14 +905,14 @@ func (g *Galaxy) LaunchWorkflow(launch *WorkflowLaunch) (answer *WorkflowInvocat
 //
 // It returns workflowstatus: An indicator of the whole workflow status,
 // its step status, and its step outputfiles. The whole status is computed as follows:
-//		* If all steps are "ok": then  == "ok"
-//              * Else if one step is "error": then == "error"
-//		* Else if one step is "deleted": then == "deleted"
-//		* Else if one step is "running": then == "running"
-//		* Else if one step is "queued": then == "queued"
-//		* Else if one step is "waiting": then == "waiting"
-//		* Else if one is is "new": then == "new"
-//		* Else : Unknown state
+//   - If all steps are "ok": then  == "ok"
+//   - Else if one step is "error": then == "error"
+//   - Else if one step is "deleted": then == "deleted"
+//   - Else if one step is "running": then == "running"
+//   - Else if one step is "queued": then == "queued"
+//   - Else if one step is "waiting": then == "waiting"
+//   - Else if one is is "new": then == "new"
+//   - Else : Unknown state
 func (g *Galaxy) CheckWorkflow(wfi *WorkflowInvocation) (wfstatus *WorkflowStatus, err error) {
 	var curstate string
 	var curoutfiles map[string]string
@@ -992,13 +995,13 @@ func (g *Galaxy) DeleteWorkflowRun(wfi *WorkflowInvocation) (err error) {
 }
 
 // Returns the global status of the workflow. It is computed as follows:
-//		* If all steps are "ok": then  == "ok"
-//		* Else if one step is "deleted": then == "deleted"
-//		* Else if one step is "running": then == "running"
-//		* Else if one step is "queued": then == "queued"
-//		* Else if one step is "waiting": then == "waiting"
-//		* Else if one is is "new": then == "new"
-//		* Else : Unknown state
+//   - If all steps are "ok": then  == "ok"
+//   - Else if one step is "deleted": then == "deleted"
+//   - Else if one step is "running": then == "running"
+//   - Else if one step is "queued": then == "queued"
+//   - Else if one step is "waiting": then == "waiting"
+//   - Else if one is is "new": then == "new"
+//   - Else : Unknown state
 func (ws *WorkflowStatus) Status() string {
 	return ws.wfStatus
 }
